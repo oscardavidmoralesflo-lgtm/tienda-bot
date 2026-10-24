@@ -1,6 +1,7 @@
 // Catálogo, juegos, búsqueda y compra
 import { InlineKeyboard } from 'grammy';
 import { kokoro } from '../kokoro.js';
+import * as catalog from '../catalog.js';
 import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, money } from '../pricing.js';
 import { s } from '../settings.js';
 import { getUser, setState } from '../users.js';
@@ -14,7 +15,7 @@ const cur = () => s('currency');
 
 // ===================== PRODUCTOS =====================
 async function visibleProducts() {
-  const list = await kokoro.products();
+  const list = await catalog.products();
   return list
     .filter((p) => !isHidden(p.id))
     .sort((a, b) => (b.stock > 0) - (a.stock > 0) || a.name.localeCompare(b.name));
@@ -32,10 +33,12 @@ export async function showProducts(ctx, page = 0) {
   await show(ctx, `🛍 <b>Productos</b> (${list.length})\nElige un producto para ver detalles y precio:`, kb);
 }
 
-async function findProduct(key) {
+async function findProduct(key, fresh = false) {
   const id = deref(key);
   if (!id) return null;
-  return (await kokoro.products()).find((p) => p.id === id && !isHidden(p.id)) || null;
+  const p = await catalog.findProduct(id, fresh);
+  if (!p || isHidden(p.id)) return null;
+  return p.displayName ? { ...p, name: p.displayName } : p;
 }
 
 async function showProduct(ctx, key) {
@@ -78,7 +81,7 @@ async function startProductPurchase(ctx, key, qty) {
 }
 
 async function confirmProduct(ctx, draft) {
-  const p = (await kokoro.products()).find((x) => x.id === draft.productId);
+  const p = await findProduct(draft.productId);
   if (!p) return ctx.reply('⚠️ Este producto ya no está disponible.');
   const unit = productUnitPrice(p, draft.qty);
   const total = Number(money(unit * draft.qty));
@@ -97,7 +100,7 @@ async function confirmProduct(ctx, draft) {
 }
 
 async function executeProduct(ctx, draft) {
-  const p = (await kokoro.products(true)).find((x) => x.id === draft.productId);
+  const p = await findProduct(draft.productId, true);
   if (!p || p.stock < draft.qty) return ctx.reply('⚠️ Ya no hay stock suficiente. No se te cobró nada.');
   const unit = productUnitPrice(p, draft.qty);
   const res = await buyProduct({

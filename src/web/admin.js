@@ -4,10 +4,12 @@ import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { one, many, query } from '../db.js';
 import { kokoro, clearCache } from '../kokoro.js';
+import { bunny, bunnyEnabled } from '../bunny.js';
+import * as catalog from '../catalog.js';
 import { s, DEFAULTS, saveSettings } from '../settings.js';
 import { money, productUnitPrice, packPrice, gameFromPrice, getOverride, saveOverride } from '../pricing.js';
 import { credit } from '../users.js';
-import { stats, refreshOrder, refundOrder, notifyDelivered } from '../orders.js';
+import { stats, refreshOrder, refundOrder, notifyDelivered, deliverManually } from '../orders.js';
 import { esc, fmtDate, STATUS_ES } from '../util.js';
 import { page, loginPage } from './layout.js';
 
@@ -80,11 +82,20 @@ export function adminRouter(bot) {
     } catch (e) {
       kb = `<span class="bad">Error: ${esc(e.message)}</span>`;
     }
+    let bb = '<span class="muted" style="font-size:13px">sin conectar</span>';
+    if (bunnyEnabled()) {
+      try {
+        bb = `${money((await bunny.profile()).merchant?.balance)} USDT`;
+      } catch (e) {
+        bb = `<span class="bad" style="font-size:13px">Error: ${esc(e.message)}</span>`;
+      }
+    }
     const recent = await many('SELECT o.*, u.first_name, u.username FROM orders o LEFT JOIN users u ON u.id=o.user_id ORDER BY o.id DESC LIMIT 10');
     const card = (k, v, cls = '') => `<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
     const body = `
       <div class="cards">
         ${card('🏦 Saldo en KOKORO', kb)}
+        ${card('🐰 Saldo en Bunny', bb)}
         ${card('💵 Facturado hoy', money(st.revenue_today))}
         ${card('📈 Ganancia hoy', money(st.profit_today), 'ok')}
         ${card('💵 Facturado total', money(st.revenue))}
@@ -184,13 +195,15 @@ export function adminRouter(bot) {
       <tr><th>Estado</th><td>${statusPill(o.status)} ${o.failure_reason ? `<div class="muted">${esc(o.failure_reason)}</div>` : ''}</td></tr>
       <tr><th>Datos del cliente</th><td><pre>${esc(JSON.stringify(input || {}, null, 1))}</pre></td></tr>
       <tr><th>Entrega</th><td>${o.delivery ? `<pre>${esc(o.delivery)}</pre>` : '<span class="muted">—</span>'}</td></tr>
-      <tr><th>ID KOKORO</th><td>${esc(o.kokoro_order_id || '—')} · <span class="muted">${esc(o.external_order_id)}</span></td></tr>
+      <tr><th>Proveedor</th><td>${o.kind === 'bunny' ? '🐰 Bunny' : '🏦 KOKORO'}</td></tr>
+      <tr><th>ID proveedor</th><td>${esc(o.kokoro_order_id || '—')} · <span class="muted">${esc(o.external_order_id)}</span></td></tr>
       <tr><th>Fecha</th><td>${fmtDate(o.created_at)} UTC</td></tr></table>
       <div class="row" style="margin-top:12px">
-        <form method="post" action="/admin/orders/${o.id}/refresh"><button class="ghost">🔄 Consultar estado en KOKORO</button></form>
+        ${o.kind !== 'bunny' ? `<form method="post" action="/admin/orders/${o.id}/refresh"><button class="ghost">🔄 Consultar estado en KOKORO</button></form>` : ''}
         ${o.status === 'delivered' ? `<form method="post" action="/admin/orders/${o.id}/resend"><button class="ghost">📨 Reenviar entrega al cliente</button></form>` : ''}
         ${!o.refunded ? `<form method="post" action="/admin/orders/${o.id}/refund" onsubmit="return confirm('¿Devolver ${money(o.price)} al saldo del cliente? Esto NO cancela el pedido en KOKORO.')"><button class="bad">↩️ Reembolsar al cliente</button></form>` : ''}
-      </div></div>`;
+      </div>
+      ${o.status !== 'delivered' && !o.refunded ? `<h2>Entregar manualmente</h2><form method="post" action="/admin/orders/${o.id}/deliver"><textarea name="delivery" required placeholder="Pega aquí la cuenta, código o link que recibiste del proveedor"></textarea><p><button class="ok">✅ Marcar entregado y enviar al cliente</button></p></form>` : ''}</div>`;
     render(req, res, `Pedido #${o.id}`, body);
   });
   r.post('/orders/:id/:action', async (req, res) => {
@@ -204,6 +217,12 @@ export function adminRouter(bot) {
     if (req.params.action === 'resend') {
       await notifyDelivered(o);
       return back(res, url, 'Entrega reenviada');
+    }
+    if (req.params.action === 'deliver') {
+      const text = String(req.body.delivery || '').trim();
+      if (!text) return back(res, url, 'Escribe la entrega');
+      const d = await deliverManually(o.id, text);
+      return back(res, url, d ? 'Entregado y enviado al cliente' : 'No se pudo (¿ya estaba entregado o reembolsado?)');
     }
     if (req.params.action === 'refund') {
       const r2 = await refundOrder(o.id, 'Reembolso manual del administrador');
@@ -279,21 +298,24 @@ export function adminRouter(bot) {
     let products = [];
     let err = '';
     try {
-      products = await kokoro.products(req.query.fresh === '1');
+      if (req.query.fresh === '1') { clearCache(); bunny.clearCache(); }
+      products = await catalog.allProducts();
     } catch (e) {
       err = e.message;
     }
     const q = String(req.query.q || '').toLowerCase();
     if (q) products = products.filter((p) => p.name.toLowerCase().includes(q));
-    products.sort((a, b) => a.name.localeCompare(b.name));
+    products.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name) || a.price - b.price);
     const body = `<p class="help">Margen general actual: <b>${esc(s('markup_products'))}%</b> (cámbialo en <a href="/admin/settings">Ajustes</a>). Aquí puedes poner un margen distinto o un precio fijo por producto, u ocultarlo del bot. Deja vacío para usar el margen general.</p>
-      ${err ? `<p class="bad">Error al leer KOKORO: ${esc(err)}</p>` : ''}
+      ${err ? `<p class="bad">Error al leer el catálogo: ${esc(err)}</p>` : ''}
+      ${catalog.bunnyStatus().error ? `<p class="bad">Bunny no respondió: ${esc(catalog.bunnyStatus().error)}</p>` : ''}
+      <p class="help">🏦 = KOKORO · 🐰 = Bunny. Cuando un producto está en los dos, el bot muestra solo el <b>más barato con stock</b> (✅) y oculta el otro (⏸). Si el ganador se agota, cambia solo.</p>
       <form class="row" style="margin-bottom:12px"><input name="q" value="${esc(req.query.q || '')}" placeholder="Buscar producto"><button>Buscar</button><a class="btn" style="background:transparent;color:var(--accent)" href="/admin/products?fresh=1">🔄 Recargar catálogo</a></form>
-      <div class="box"><table><tr><th>Producto</th><th>Stock</th><th>Costo</th><th>Tu precio</th><th>Margen %</th><th>Precio fijo</th><th>Ocultar</th><th></th></tr>
+      <div class="box"><table><tr><th>Producto</th><th>Origen</th><th>Stock</th><th>Costo</th><th>Tu precio</th><th>Margen %</th><th>Precio fijo</th><th>Ocultar</th><th></th></tr>
       ${products.map((p) => {
         const o = getOverride(p.id) || {};
         const formId = `f_${crypto.createHash('md5').update(p.id).digest('hex').slice(0, 10)}`;
-        return `<tr><td>${esc(p.emoji_base || '')} ${esc(p.name)}<div class="muted" style="font-size:11px">${esc(p.id)}</div></td><td>${p.stock}</td><td>${money(p.price)}</td>
+        return `<tr style="${p.winner ? '' : 'opacity:.55'}"><td>${esc(p.emoji_base || '')} ${esc(p.name)}${p.group ? `<div style="font-size:12px">${p.winner ? '✅ Se muestra como' : '⏸ Oculto (hay uno mejor):'} <b>${esc(p.group)}</b></div>` : ''}<div class="muted" style="font-size:11px">${esc(p.id)}</div></td><td>${p.source === 'bunny' ? '🐰' : '🏦'}</td><td>${p.stock}</td><td>${money(p.price)}</td>
         <td><b>${money(productUnitPrice(p))}</b></td>
         <td><input form="${formId}" name="markup" class="w80" value="${o.markup ?? ''}" placeholder="${esc(s('markup_products'))}"></td>
         <td><input form="${formId}" name="fixed_price" class="w80" value="${o.fixed_price ?? ''}"></td>
@@ -414,6 +436,7 @@ export function adminRouter(bot) {
       <label class="f"><input type="checkbox" name="maintenance" ${s('maintenance') === '1' ? 'checked' : ''}> Modo mantenimiento (el bot no atiende a clientes)</label>
       <p><button>💾 Guardar ajustes</button></p></form></div>
       <div class="box"><h2 style="margin-top:0">Conexión</h2>
+      <p>API Bunny: ${bunnyEnabled() ? '✅ configurada' : '<span class="warn">sin API key (pon BUNNY_API_KEY)</span>'}</p>
       <p>API KOKORO: <code>${esc(config.kokoroBase)}</code> · token ${config.kokoroToken ? '✅ configurado' : '<span class="bad">falta</span>'}</p>
       <p>Admins de Telegram: ${config.adminIds.length ? config.adminIds.map((i) => `<code>${i}</code>`).join(', ') : '<span class="bad">ninguno (pon ADMIN_IDS)</span>'}</p>
       <p>URL pública: ${config.publicUrl ? esc(config.publicUrl) : '<span class="muted">modo local (polling)</span>'}</p>

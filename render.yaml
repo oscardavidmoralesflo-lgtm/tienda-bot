@@ -21,6 +21,8 @@ services:
         sync: false
       - key: SHOP_PREFIX
         sync: false
+      - key: BUNNY_API_KEY
+        sync: false
       - key: DB_SCHEMA
         value: tienda
       - key: SESSION_SECRET

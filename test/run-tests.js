@@ -7,6 +7,8 @@ process.env.KOKORO_BASE_URL = 'http://localhost:4010';
 process.env.KOKORO_API_TOKEN = 'sk_test';
 process.env.DATABASE_URL = '';
 process.env.PUBLIC_URL = '';
+process.env.BUNNY_API_KEY = 'bn_test';
+process.env.BUNNY_BASE_URL = 'http://localhost:4010/bunny/api/v1';
 process.chdir(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 rmSync('./data', { recursive: true, force: true });
 
@@ -120,6 +122,46 @@ await test('compras simultáneas no dejan saldo negativo', async () => {
   const rs = await Promise.all([1, 2, 3].map(() => orders.buyProduct({ userId: 333, product: p, quantity: 1, unitPrice: 3.6 })));
   assert.equal(rs.filter((r) => r.ok).length, 1);
   assert.ok((await users.getUser(333)).balance >= 0);
+});
+
+const catalog = await import('../src/catalog.js');
+await test('catálogo unificado: gana el más barato con stock y sin duplicados', async () => {
+  const list = await catalog.products();
+  const ids = list.map((p) => p.id);
+  assert.ok(ids.includes('bunny:57'));            // Gemini en Bunny (1.50) le gana a KOKORO (2.50)
+  assert.ok(!ids.includes('gemini_pro_18m'));
+  assert.equal(list.find((p) => p.id === 'bunny:57').name, 'Gemini AI PRO 18 Meses');
+  assert.ok(ids.includes('code_spotify_90d'));    // Spotify en Bunny está agotado -> KOKORO
+  assert.ok(!ids.includes('bunny:11'));
+  assert.ok(!ids.includes('prueba_bot'));         // productos internos ocultos
+  assert.equal(list.find((p) => p.id === 'bunny:65').stock, 999); // stock ilimitado
+  assert.equal(new Set(list.map((p) => p.name)).size, list.length);
+});
+
+await test('compra en Bunny: entrega el link con garantía y registra costo', async () => {
+  await users.upsertUser({ id: 444, first_name: 'Dani' });
+  await users.credit(444, 10, 'recharge', 'test');
+  const p = await catalog.findProduct('bunny:57');
+  const r = await orders.buyProduct({ userId: 444, product: { ...p, name: 'Gemini AI PRO 18 Meses' }, quantity: 1, unitPrice: pricing.productUnitPrice(p) });
+  assert.equal(r.ok, true);
+  assert.equal(r.order.status, 'delivered');
+  assert.equal(r.order.kind, 'bunny');
+  assert.match(r.order.delivery, /gemini\.link\/abc[\s\S]*Garantía: 30 days/);
+  assert.equal(Number(r.order.cost), 1.5);
+  assert.equal(Number(r.order.price), 1.8);
+});
+
+await test('Bunny sin respuesta: no reembolsa solo, avisa al admin y se entrega manual', async () => {
+  const before = (await users.getUser(444)).balance;
+  const p = await catalog.findProduct('bunny:99');
+  const r = await orders.buyProduct({ userId: 444, product: p, quantity: 1, unitPrice: 1.2 });
+  assert.equal(r.order.status, 'processing');
+  assert.equal((await users.getUser(444)).balance, pricing.round2(before - 1.2));
+  assert.ok(sent.some(([to, t]) => to === 'admin' && t.includes('sin respuesta clara')));
+  await orders.pollOpenOrders(); // no debe tocar pedidos de Bunny
+  const d = await orders.deliverManually(r.order.id, 'cuenta: x@y.com');
+  assert.equal(d.status, 'delivered');
+  assert.ok(sent.some(([to, t]) => to === 444 && t.includes('cuenta: x@y.com')));
 });
 
 await test('ajustes guardados', async () => {

@@ -6,6 +6,9 @@ export const config = {
   botToken: process.env.BOT_TOKEN || '',
   kokoroToken: process.env.KOKORO_API_TOKEN || '',
   kokoroBase: (process.env.KOKORO_BASE_URL || 'https://api.shopdigital.app').replace(/\/$/, ''),
+  // Segundo proveedor (opcional): Bunny AI Store
+  bunnyKey: process.env.BUNNY_API_KEY || '',
+  bunnyBase: (process.env.BUNNY_BASE_URL || 'https://bunnytoolsbot.tech/api/v1').replace(/\/$/, ''),
   // Sin DATABASE_URL se usa una base de datos local en ./data (solo para pruebas en tu PC)
   databaseUrl: process.env.DATABASE_URL || '',
   // Esquema propio dentro de la base de datos (para no mezclar con otras tablas)

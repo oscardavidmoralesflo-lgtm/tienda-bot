@@ -10,13 +10,38 @@ export function startMock(port = 4010) {
     { id: 'netflix_1m', name: 'Netflix 1 mes', price: 3, stock: 5, min_order: 1, bulk_discounts: [{ min_qty: 5, unit_price: 2.5 }], requires_activation_data: false, description_es: '<p><strong>Cuenta</strong> privada<br>1 mes</p><script>x</script>' },
     { id: 'duo_plus', name: 'Duolingo Plus', price: 1.2, stock: 10, min_order: 1, requires_activation_data: true, activation_data_type: 'email', description_es: 'Activación en tu correo' },
     { id: 'caro', name: 'Producto caro', price: 500, stock: 3, min_order: 1, description_es: '' },
+    { id: 'gemini_pro_18m', name: 'Gemini AI PRO 18M', price: 2.5, stock: 81, min_order: 1, description_es: '' },
+    { id: 'code_spotify_90d', name: 'Code Spotify Premium 3M', price: 1.5, stock: 1055, min_order: 1, description_es: '' },
+    { id: 'prueba_bot', name: 'API Test', price: 0.01, stock: 100, min_order: 1, description_es: '' },
   ];
   const packs = [
     { id: 'rg_ff100', game_id: 'topup:free-fire', name: 'Free Fire', pack: '100 diamantes', region: 'latam', region_name_es: 'Latam', price: 0.74, in_stock: true, delivery: 'account', validation: 'region', fields: [{ key: 'player_id', label_es: 'ID de jugador', type: 'text', required: true }] },
     { id: 'rg_ff520', game_id: 'topup:free-fire', name: 'Free Fire', pack: '520 diamantes', region: 'brasil', region_name_es: 'Brasil', price: 3.6, in_stock: true, delivery: 'account', validation: 'region', fields: [{ key: 'player_id', label_es: 'ID de jugador', type: 'text', required: true }] },
   ];
+  // ---- Bunny simulado ----
+  let bunnyBalance = 20;
+  const bunnyProducts = [
+    { id: 57, name: 'Link Gemini Pro 18 Month Quality Links', price: 1.5, stock_count: 483, warranty_info: '30 days' },
+    { id: 11, name: 'Spotify Premium — 3 Months | Redeem Link', price: 1.0, stock_count: 0 },
+    { id: 65, name: 'Claude API – 10 Million Credits | 1 Day', price: 1.1, stock_count: '∞' },
+    { id: 99, name: 'Falla de red', price: 1, stock_count: 5 },
+  ];
+  app.use('/bunny/api/v1', (req, res, next) => (req.headers['x-api-key'] === 'bn_test' ? next() : res.status(401).json({ status: 'error', message: 'Invalid API key' })));
+  app.get('/bunny/api/v1/products', (req, res) => res.json({ products: bunnyProducts }));
+  app.get('/bunny/api/v1/profile', (req, res) => res.json({ merchant: { name: 'Test', balance: bunnyBalance } }));
+  app.post('/bunny/api/v1/order/create', (req, res) => {
+    const { product_id, quantity = 1, selling_price } = req.body;
+    const p = bunnyProducts.find((x) => x.id === product_id);
+    if (!p) return res.status(404).json({ status: 'error', message: 'Product not found' });
+    if (p.id === 99) return req.socket.destroy();
+    if (selling_price < p.price) return res.status(400).json({ status: 'error', message: 'Selling price below base price' });
+    if (p.price * quantity > bunnyBalance) return res.status(400).json({ status: 'error', message: 'Insufficient balance' });
+    bunnyBalance -= p.price * quantity;
+    res.json({ status: 'success', order: { order_code: 'BN-TEST-1', product_name: p.name, base_price: p.price, delivered_item: 'https://gemini.link/abc', warranty_info: p.warranty_info } });
+  });
+
   const auth = (req, res, next) => (req.headers.authorization === 'Bearer sk_test' ? next() : res.status(401).json({ success: false, error: 'Invalid token' }));
-  app.use(auth);
+  app.use('/api', auth);
   app.get('/api/balance', (req, res) => res.json({ success: true, user_id: 1, balance }));
   app.get('/api/products', (req, res) => res.json({ success: true, count: products.length, products }));
   app.post('/api/purchase', (req, res) => {

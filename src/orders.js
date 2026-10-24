@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import { one, many, query, tx } from './db.js';
 import { kokoro, KokoroError } from './kokoro.js';
+import { bunny, BunnyError } from './bunny.js';
 import { credit, getUser } from './users.js';
 import { num, s } from './settings.js';
 import { money, round2 } from './pricing.js';
@@ -95,11 +96,13 @@ async function markDelivered(o, delivery, kokoroOrderId) {
 export async function buyProduct({ userId, product, quantity, unitPrice, activationData }) {
   const cost = round2(Number(product._unitCost ?? product.price) * quantity);
   const price = round2(unitPrice * quantity);
+  const isBunny = product.source === 'bunny';
   const o = await createOrder({
-    userId, kind: 'product', productId: product.id, productName: product.name, quantity, cost, price,
+    userId, kind: isBunny ? 'bunny' : 'product', productId: product.id, productName: product.name, quantity, cost, price,
     input: activationData ? { activation_data: activationData } : {},
   });
   if (!o) return { ok: false, reason: 'balance' };
+  if (isBunny) return buyFromBunny(o, product, quantity, unitPrice);
 
   const body = { product_id: product.id, quantity, external_order_id: o.external_order_id };
   if (activationData) body.activation_data = activationData;
@@ -118,6 +121,62 @@ export async function buyProduct({ userId, product, quantity, unitPrice, activat
   }
   const d = await markDelivered(o, delivery, res.order_id);
   return { ok: true, order: d || o };
+}
+
+// ===================== BUNNY =====================
+async function buyFromBunny(o, product, quantity, unitPrice) {
+  let res;
+  try {
+    // Bunny exige vender a precio >= mayorista (nunca por debajo)
+    const sellingPrice = Math.max(round2(unitPrice), Number(product.price));
+    res = await bunny.createOrder({ productId: product.sourceId, quantity, sellingPrice });
+  } catch (e) {
+    if (e instanceof BunnyError && e.definitelyNotCharged) {
+      if (/balance|insufficient|fund|saldo/i.test(e.message)) {
+        await notifier.admins(`🚨 <b>Venta perdida por saldo insuficiente en Bunny</b>\nPedido #${o.id}: ${esc(o.product_name)} (costo ${money(o.cost)} USDT). Recarga en @bunnytoolss_bot → Deposit.`);
+        await refundOrder(o.id, FRIENDLY[402]);
+        return { ok: false, reason: 'api', message: FRIENDLY[402], order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
+      }
+      const reason = /stock/i.test(e.message) ? 'Sin stock en este momento.' : e.message;
+      await refundOrder(o.id, reason);
+      return { ok: false, reason: 'api', message: reason, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
+    }
+    // Sin respuesta clara: Bunny no permite consultar pedidos, así que lo revisa el admin (no se reintenta para no cobrar doble)
+    await update(o.id, { status: 'processing', failure_reason: `Revisar en Bunny: ${String(e.message).slice(0, 250)}` });
+    await notifier.admins(`⚠️ <b>Pedido #${o.id} (Bunny) sin respuesta clara</b>\n${esc(o.product_name)}\nRevisa tu historial en @bunnytoolss_bot. Luego, en el panel → Pedidos → #${o.id}, entrega manualmente o reembolsa.`);
+    return { ok: true, processing: true, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
+  }
+  const ord = res.order || {};
+  const item = ord.delivered_item ?? ord.delivered_items ?? ord.items;
+  const delivery = Array.isArray(item) ? item.join('\n') : String(item || '');
+  if (!delivery) {
+    await update(o.id, { status: 'processing', kokoro_order_id: ord.order_code || null, failure_reason: 'Bunny no devolvió el producto' });
+    await notifier.admins(`⚠️ Pedido #${o.id} (Bunny ${esc(ord.order_code || '')}) pagado pero sin datos de entrega. Revísalo en @bunnytoolss_bot y entrégalo desde el panel.`);
+    return { ok: true, processing: true, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
+  }
+  const full = ord.warranty_info ? `${delivery}\n\n🛡 Garantía: ${ord.warranty_info}` : delivery;
+  const d = await markDelivered(o, full, ord.order_code);
+  checkBunnyBalance().catch(() => {});
+  return { ok: true, order: d || o };
+}
+
+async function checkBunnyBalance() {
+  const limit = num('low_balance_alert');
+  if (limit <= 0) return;
+  const p = await bunny.profile();
+  const bal = Number(p.merchant?.balance);
+  if (Number.isFinite(bal) && bal < limit) {
+    await notifier.admins(`⚠️ Tu saldo en Bunny está bajo: <b>${money(bal)} USDT</b>. Recarga en @bunnytoolss_bot → Deposit.`);
+  }
+}
+
+// Entrega manual desde el panel (para pedidos que quedaron pendientes)
+export async function deliverManually(orderId, delivery) {
+  const o = await one('SELECT * FROM orders WHERE id=$1', [orderId]);
+  if (!o || o.refunded) return null;
+  const d = await markDelivered(o, delivery, null);
+  if (d) await notifyDelivered(d);
+  return d;
 }
 
 // ===================== JUEGOS / GIFT CARDS / KEYS =====================
@@ -237,6 +296,7 @@ async function handlePurchaseError(o, e) {
 
 // ===================== VERIFICACIÓN DE ESTADO =====================
 export async function refreshOrder(o) {
+  if (o.kind === 'bunny') return o; // Bunny no tiene consulta de pedidos: lo resuelve el admin
   try {
     if (o.kind === 'game') {
       const r = await kokoro.gameOrder(o.external_order_id);
@@ -275,7 +335,7 @@ async function maybeRefundMissing(o) {
 
 export async function pollOpenOrders() {
   const open = await many(
-    `SELECT * FROM orders WHERE status IN ('pending','processing','action_required')
+    `SELECT * FROM orders WHERE status IN ('pending','processing','action_required') AND kind <> 'bunny'
      AND created_at > now() - interval '3 days' ORDER BY id LIMIT 30`,
   );
   for (const o of open) {
