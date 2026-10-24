@@ -23,8 +23,11 @@ export async function initDb() {
     });
     // DB_SCHEMA permite compartir un proyecto de Supabase sin mezclar tablas
     if (config.dbSchema) {
-      pool.on('connect', (c) => c.query(`SET search_path TO "${config.dbSchema}"`));
-      await pool.query(`CREATE SCHEMA IF NOT EXISTS "${config.dbSchema}"`);
+      pool.on('connect', (c) => {
+        c.query(`SET search_path TO "${config.dbSchema}"`).catch(() => {});
+      });
+      const exists = await pool.query('SELECT 1 FROM pg_namespace WHERE nspname = $1', [config.dbSchema]);
+      if (!exists.rows.length) await pool.query(`CREATE SCHEMA "${config.dbSchema}"`);
     }
     impl = {
       kind: 'postgres',
