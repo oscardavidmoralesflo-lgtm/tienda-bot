@@ -11,7 +11,7 @@ Tu propio bot de Telegram que vende el catálogo de KOKORO SHOP con **tu margen 
 ⚠️ Mantén saldo en KOKORO (en @Shop_KOKORO_BOT). Si no alcanza, el bot devuelve el dinero al cliente y te avisa.
 
 ## Dos proveedores: KOKORO + Bunny
-El catálogo junta KOKORO y Bunny AI Store. Si un producto está en los dos, el bot muestra solo el **más barato con stock** (y cambia solo si se agota). La lista de productos equivalentes está en . Para activar Bunny pon  (en @bunnytoolss_bot → Bot API). Bunny no permite consultar pedidos: si uno queda sin respuesta, te llega un aviso y lo entregas o reembolsas desde el panel.
+El catálogo junta KOKORO y Bunny AI Store. Si un producto está en los dos, el bot muestra solo el **más barato con stock** (y cambia solo si se agota). La lista de productos equivalentes está en `src/catalog-groups.js`. Para activar Bunny pon `BUNNY_API_KEY` (en @bunnytoolss_bot → Bot API). Bunny no permite consultar pedidos: si uno queda sin respuesta, te llega un aviso y lo entregas o reembolsas desde el panel.
 
 ## Funciones del bot (clientes)
 - 🛍 Catálogo de productos digitales con stock en vivo, descuentos por volumen y entrega instantánea
