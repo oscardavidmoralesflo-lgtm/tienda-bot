@@ -19,20 +19,26 @@ async function sources(fresh) {
 }
 
 // Todos los productos de ambos proveedores, marcando cuál gana en cada grupo (para el panel)
+// Grupos manuales (catalog-groups.js) y, además, productos con exactamente el mismo nombre
+const nameKey = (n) => `name:${String(n).toLowerCase().replace(/\s+/g, ' ').trim()}`;
+const keyOf = (p) => (groupOf.has(p.id) ? `g:${groupOf.get(p.id)}` : nameKey(p.name));
+
 export async function allProducts(fresh = false) {
   const list = (await sources(fresh)).filter((p) => !ALWAYS_HIDDEN.includes(p.id));
   const best = new Map();
+  const size = new Map();
   for (const p of list) {
-    const g = groupOf.get(p.id);
-    if (g === undefined) continue;
-    const cur = best.get(g);
-    if (!cur || better(p, cur)) best.set(g, p);
+    const k = keyOf(p);
+    size.set(k, (size.get(k) || 0) + 1);
+    const cur = best.get(k);
+    if (!cur || better(p, cur)) best.set(k, p);
   }
   return list.map((p) => {
-    const g = groupOf.get(p.id);
-    if (g === undefined) return { ...p, group: null, winner: true };
-    const w = best.get(g);
-    return { ...p, group: GROUPS[g].name, winner: w.id === p.id, displayName: GROUPS[g].name };
+    const k = keyOf(p);
+    const manual = groupOf.has(p.id) ? GROUPS[groupOf.get(p.id)].name : null;
+    if (!manual && size.get(k) === 1) return { ...p, group: null, winner: true };
+    const groupName = manual || p.name;
+    return { ...p, group: groupName, winner: best.get(k).id === p.id, displayName: manual || undefined };
   });
 }
 

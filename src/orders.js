@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import { one, many, query, tx } from './db.js';
 import { kokoro, KokoroError } from './kokoro.js';
-import { bunny, BunnyError } from './bunny.js';
+import { bunny, BunnyError, balanceOf } from './bunny.js';
 import { credit, getUser } from './users.js';
 import { num, s } from './settings.js';
 import { money, round2 } from './pricing.js';
@@ -146,8 +146,8 @@ async function buyFromBunny(o, product, quantity, unitPrice) {
     await notifier.admins(`⚠️ <b>Pedido #${o.id} (Bunny) sin respuesta clara</b>\n${esc(o.product_name)}\nRevisa tu historial en @bunnytoolss_bot. Luego, en el panel → Pedidos → #${o.id}, entrega manualmente o reembolsa.`);
     return { ok: true, processing: true, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
   }
-  const ord = res.order || {};
-  const item = ord.delivered_item ?? ord.delivered_items ?? ord.items;
+  const ord = res.order || res.data || res;
+  const item = ord.delivered_item ?? ord.delivered_items ?? ord.items ?? ord.item ?? ord.delivery ?? ord.credentials;
   const delivery = Array.isArray(item) ? item.join('\n') : String(item || '');
   if (!delivery) {
     await update(o.id, { status: 'processing', kokoro_order_id: ord.order_code || null, failure_reason: 'Bunny no devolvió el producto' });
@@ -155,7 +155,7 @@ async function buyFromBunny(o, product, quantity, unitPrice) {
     return { ok: true, processing: true, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
   }
   const full = ord.warranty_info ? `${delivery}\n\n🛡 Garantía: ${ord.warranty_info}` : delivery;
-  const d = await markDelivered(o, full, ord.order_code);
+  const d = await markDelivered(o, full, ord.order_code || ord.order_id || null);
   checkBunnyBalance().catch(() => {});
   return { ok: true, order: d || o };
 }
@@ -164,7 +164,7 @@ async function checkBunnyBalance() {
   const limit = num('low_balance_alert');
   if (limit <= 0) return;
   const p = await bunny.profile();
-  const bal = Number(p.merchant?.balance);
+  const bal = balanceOf(p);
   if (Number.isFinite(bal) && bal < limit) {
     await notifier.admins(`⚠️ Tu saldo en Bunny está bajo: <b>${money(bal)} USDT</b>. Recarga en @bunnytoolss_bot → Deposit.`);
   }

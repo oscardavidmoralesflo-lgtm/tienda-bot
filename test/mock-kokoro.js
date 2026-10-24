@@ -21,23 +21,23 @@ export function startMock(port = 4010) {
   // ---- Bunny simulado ----
   let bunnyBalance = 20;
   const bunnyProducts = [
-    { id: 57, name: 'Link Gemini Pro 18 Month Quality Links', price: 1.5, stock_count: 483, warranty_info: '30 days' },
-    { id: 11, name: 'Spotify Premium — 3 Months | Redeem Link', price: 1.0, stock_count: 0 },
-    { id: 65, name: 'Claude API – 10 Million Credits | 1 Day', price: 1.1, stock_count: '∞' },
-    { id: 99, name: 'Falla de red', price: 1, stock_count: 5 },
+    { product_id: 57, name: 'Link Gemini Pro 18 Month Quality Links', base_price: 1.5, stock_count: 483, description: 'Link\r\n<tg-emoji emoji-id="1">⭐</tg-emoji> 18 meses', warranty_info: '30 days' },
+    { product_id: 11, name: 'Spotify Premium — 3 Months | Redeem Link', base_price: 1.0, stock_count: 0 },
+    { product_id: 65, name: 'Claude API – 10 Million Credits | 1 Day', base_price: 1.1, stock_count: '∞' },
+    { product_id: 99, name: 'Falla de red', base_price: 1, stock_count: 5 },
   ];
   app.use('/bunny/api/v1', (req, res, next) => (req.headers['x-api-key'] === 'bn_test' ? next() : res.status(401).json({ status: 'error', message: 'Invalid API key' })));
   app.get('/bunny/api/v1/products', (req, res) => res.json({ products: bunnyProducts }));
-  app.get('/bunny/api/v1/profile', (req, res) => res.json({ merchant: { name: 'Test', balance: bunnyBalance } }));
+  app.get('/bunny/api/v1/profile', (req, res) => res.json({ success: true, name: 'Test', balance: bunnyBalance }));
   app.post('/bunny/api/v1/order/create', (req, res) => {
     const { product_id, quantity = 1, selling_price } = req.body;
-    const p = bunnyProducts.find((x) => x.id === product_id);
+    const p = bunnyProducts.find((x) => x.product_id === product_id);
     if (!p) return res.status(404).json({ status: 'error', message: 'Product not found' });
-    if (p.id === 99) return req.socket.destroy();
-    if (selling_price < p.price) return res.status(400).json({ status: 'error', message: 'Selling price below base price' });
-    if (p.price * quantity > bunnyBalance) return res.status(400).json({ status: 'error', message: 'Insufficient balance' });
-    bunnyBalance -= p.price * quantity;
-    res.json({ status: 'success', order: { order_code: 'BN-TEST-1', product_name: p.name, base_price: p.price, delivered_item: 'https://gemini.link/abc', warranty_info: p.warranty_info } });
+    if (p.product_id === 99) return req.socket.destroy();
+    if (selling_price < p.base_price) return res.status(400).json({ status: 'error', message: 'Selling price below base price' });
+    if (p.base_price * quantity > bunnyBalance) return res.status(400).json({ status: 'error', message: 'Insufficient balance' });
+    bunnyBalance -= p.base_price * quantity;
+    res.json({ status: 'success', order: { order_code: 'BN-TEST-1', product_name: p.name, base_price: p.base_price, delivered_item: 'https://gemini.link/abc', warranty_info: p.warranty_info } });
   });
 
   const auth = (req, res, next) => (req.headers.authorization === 'Bearer sk_test' ? next() : res.status(401).json({ success: false, error: 'Invalid token' }));

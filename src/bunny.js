@@ -62,23 +62,29 @@ export function cleanName(n) {
 }
 
 // Convierte un producto de Bunny al mismo formato que KOKORO
+// (la API real usa product_id/base_price/description; la documentación dice id/price/warranty_info)
 export function normalize(p) {
+  const id = p.product_id ?? p.id;
+  const desc = String(p.description || '').replace(/\r/g, '').replace(/\n/g, '<br>');
+  const warranty = p.warranty_info ? `🛡 <b>Garantía:</b> ${p.warranty_info}` : '';
   return {
-    id: `bunny:${p.id}`,
+    id: `bunny:${id}`,
     name: cleanName(p.name),
-    price: Number(p.price),
+    price: Number(p.base_price ?? p.price),
     stock: stockOf(p.stock_count ?? p.stock),
     min_order: 1,
     bulk_discounts: [],
     requires_activation_data: false,
     activation_data_type: null,
     emoji_base: null,
-    description_es: p.warranty_info ? `🛡 <b>Garantía:</b> ${p.warranty_info}` : '',
-    description_en: p.warranty_info ? `🛡 Warranty: ${p.warranty_info}` : '',
+    description_es: [desc, warranty].filter(Boolean).join('<br><br>'),
+    description_en: [desc, warranty].filter(Boolean).join('<br><br>'),
     source: 'bunny',
-    sourceId: Number(p.id),
+    sourceId: Number(id),
   };
 }
+
+export const balanceOf = (profile) => Number(profile?.merchant?.balance ?? profile?.balance);
 
 let cache = null;
 export const bunny = {

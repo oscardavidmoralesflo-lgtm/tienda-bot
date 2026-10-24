@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { one, many, query } from '../db.js';
 import { kokoro, clearCache } from '../kokoro.js';
-import { bunny, bunnyEnabled } from '../bunny.js';
+import { bunny, bunnyEnabled, balanceOf } from '../bunny.js';
 import * as catalog from '../catalog.js';
 import { s, DEFAULTS, saveSettings } from '../settings.js';
 import { money, productUnitPrice, packPrice, gameFromPrice, getOverride, saveOverride } from '../pricing.js';
@@ -85,7 +85,7 @@ export function adminRouter(bot) {
     let bb = '<span class="muted" style="font-size:13px">sin conectar</span>';
     if (bunnyEnabled()) {
       try {
-        bb = `${money((await bunny.profile()).merchant?.balance)} USDT`;
+        bb = `${money(balanceOf(await bunny.profile()))} USDT`;
       } catch (e) {
         bb = `<span class="bad" style="font-size:13px">Error: ${esc(e.message)}</span>`;
       }
