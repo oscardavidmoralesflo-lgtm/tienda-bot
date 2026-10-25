@@ -1,6 +1,7 @@
 // Cliente de la API de KOKORO SHOP (https://api.shopdigital.app)
 import crypto from 'node:crypto';
 import { config } from './config.js';
+import * as cache from './cache.js';
 
 export class KokoroError extends Error {
   constructor(message, { status, code, body, network } = {}) {
@@ -65,23 +66,15 @@ async function call(method, path, { query, body, timeout = 30000 } = {}) {
 }
 
 // ---- caché simple en memoria ----
-const cache = new Map();
-async function cached(key, ttlMs, fn) {
-  const hit = cache.get(key);
-  if (hit && hit.exp > Date.now()) return hit.value;
-  const value = await fn();
-  cache.set(key, { value, exp: Date.now() + ttlMs });
-  return value;
-}
-export const clearCache = () => cache.clear();
+const cached = (key, _ttl, fn) => cache.swr(`k:${key}`, fn);
+export const clearCache = () => cache.clear('k:');
+const loadProducts = () => call('GET', '/api/products').then((d) => d.products || []);
 
 export const kokoro = {
   balance: () => call('GET', '/api/balance'),
 
-  // Productos digitales
-  products: (fresh = false) =>
-    fresh ? call('GET', '/api/products').then((d) => d.products || [])
-      : cached('products', 60_000, () => call('GET', '/api/products').then((d) => d.products || [])),
+  // Productos digitales (siempre desde memoria; fresh=true al momento de pagar)
+  products: (fresh = false) => (fresh ? cache.fresh('k:products', loadProducts) : cache.swr('k:products', loadProducts)),
   purchase: (body) => call('POST', '/api/purchase', { body: { credentials_format: 'lines', ...body }, timeout: 60000 }),
   productOrder: (orderId) => call('GET', '/api/orders', { query: { order_id: orderId, credentials_format: 'lines' } }),
 

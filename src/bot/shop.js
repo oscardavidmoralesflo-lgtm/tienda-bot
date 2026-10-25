@@ -2,7 +2,7 @@
 import { InlineKeyboard } from 'grammy';
 import { kokoro } from '../kokoro.js';
 import * as catalog from '../catalog.js';
-import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, money } from '../pricing.js';
+import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, money, copSuffix } from '../pricing.js';
 import { s } from '../settings.js';
 import { getUser, setState } from '../users.js';
 import { buyProduct, buyGamePack, refreshOrder, askForCode, formatDelivery, sendConfirmationCode } from '../orders.js';
@@ -45,7 +45,7 @@ async function showProduct(ctx, key) {
   const p = await findProduct(key);
   if (!p) return show(ctx, '⚠️ Este producto ya no está disponible. Abre de nuevo el catálogo.');
   const unit = productUnitPrice(p);
-  let text = `${p.emoji_base || '🛍'} <b>${esc(p.name)}</b>\n\n💵 Precio: <b>${money(unit)} ${cur()}</b>\n📦 Stock: ${p.stock > 0 ? p.stock : 'agotado'}`;
+  let text = `${p.emoji_base || '🛍'} <b>${esc(p.name)}</b>\n\n💵 Precio: <b>${money(unit)} ${cur()}</b>${copSuffix(unit)}\n📦 Stock: ${p.stock > 0 ? p.stock : 'agotado'}`;
   if (p.min_order > 1) text += `\n🔢 Compra mínima: ${p.min_order}`;
   const tiers = (p.bulk_discounts || []).filter((t) => t.min_qty > 1);
   if (tiers.length) {
@@ -87,7 +87,7 @@ async function confirmProduct(ctx, draft) {
   const total = Number(money(unit * draft.qty));
   const u = await getUser(ctx.from.id);
   await setState(ctx.from.id, { step: 'confirm', draft: { ...draft, total } });
-  let text = `🧾 <b>Confirma tu compra</b>\n\n${esc(p.name)}\nCantidad: ${draft.qty}\nPrecio unitario: ${money(unit)} ${cur()}\n<b>Total: ${money(total)} ${cur()}</b>`;
+  let text = `🧾 <b>Confirma tu compra</b>\n\n${esc(p.name)}\nCantidad: ${draft.qty}\nPrecio unitario: ${money(unit)} ${cur()}\n<b>Total: ${money(total)} ${cur()}</b>${copSuffix(total)}`;
   if (draft.activation) text += `\nDatos: <code>${esc(draft.activation)}</code>`;
   text += `\n\n💰 Tu saldo: ${money(u.balance)} ${cur()}`;
   const kb = new InlineKeyboard();
@@ -190,7 +190,7 @@ async function showPack(ctx, gameKey, packKey) {
   if (!r) return show(ctx, '⚠️ Este paquete ya no está disponible. Vuelve a abrir el juego.');
   const { game, pack } = r;
   const price = packPrice(pack, game.id);
-  let text = `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>\n📦 <b>${esc(pack.pack || pack.name)}</b>\n\n💵 Precio: <b>${money(price)} ${cur()}</b>`;
+  let text = `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>\n📦 <b>${esc(pack.pack || pack.name)}</b>\n\n💵 Precio: <b>${money(price)} ${cur()}</b>${copSuffix(price)}`;
   if (pack.region_name_es || pack.region_name) text += `\n🌎 Región: ${esc(pack.region_name_es || pack.region_name)}`;
   if (pack.delivery_time_es || pack.delivery_time) text += `\n⚡ Entrega: ${esc(pack.delivery_time_es || pack.delivery_time)}`;
   text += `\n📬 ${pack.delivery === 'code' ? 'Recibes un código' : 'Se recarga directo en tu cuenta'}`;
@@ -285,7 +285,7 @@ async function validateAndConfirmGame(ctx, draft) {
   const total = Number(money(unit * draft.qty));
   const u = await getUser(ctx.from.id);
   await setState(ctx.from.id, { step: 'confirm', draft: { ...draft, total } });
-  let text = `🧾 <b>Confirma tu compra</b>\n\n${esc(game.name)} — ${esc(pack.pack || pack.name)}${draft.qty > 1 ? ` x${draft.qty}` : ''}\n<b>Total: ${money(total)} ${cur()}</b>`;
+  let text = `🧾 <b>Confirma tu compra</b>\n\n${esc(game.name)} — ${esc(pack.pack || pack.name)}${draft.qty > 1 ? ` x${draft.qty}` : ''}\n<b>Total: ${money(total)} ${cur()}</b>${copSuffix(total)}`;
   for (const f of draft.ask) {
     const val = f.key === '__country' ? draft.country : draft.fields[f.key];
     const label = f.options?.find((o) => o.value === val)?.label || val;

@@ -1,5 +1,6 @@
 // Cliente de la API de revendedores de Bunny AI Store (https://bunnytoolsbot.tech/developer)
 import { config } from './config.js';
+import * as cache from './cache.js';
 
 export class BunnyError extends Error {
   constructor(message, { status, body, network } = {}) {
@@ -86,19 +87,20 @@ export function normalize(p) {
 
 export const balanceOf = (profile) => Number(profile?.merchant?.balance ?? profile?.balance);
 
-let cache = null;
+const loadProducts = async () => {
+  const d = await call('GET', '/products');
+  return (d.products || []).map(normalize).filter((p) => p.name && p.price > 0);
+};
+
 export const bunny = {
+  // Siempre desde memoria (se refresca cada 3 min); fresh=true al momento de pagar
   async products(fresh = false) {
     if (!bunnyEnabled()) return [];
-    if (!fresh && cache && cache.exp > Date.now()) return cache.value;
-    const d = await call('GET', '/products');
-    const value = (d.products || []).map(normalize).filter((p) => p.name && p.price > 0);
-    cache = { value, exp: Date.now() + 60_000 };
-    return value;
+    return fresh ? cache.fresh('b:products', loadProducts) : cache.swr('b:products', loadProducts);
   },
   profile: () => call('GET', '/profile'),
   // Una sola llamada, sin reintentos: Bunny no protege contra pedidos duplicados.
   createOrder: ({ productId, quantity, sellingPrice }) =>
     call('POST', '/order/create', { product_id: productId, quantity, selling_price: sellingPrice }, 60000),
-  clearCache: () => { cache = null; },
+  clearCache: () => cache.clear('b:'),
 };

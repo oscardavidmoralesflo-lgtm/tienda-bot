@@ -3,7 +3,7 @@ import { config, isAdmin } from '../config.js';
 import { one, many, query } from '../db.js';
 import { kokoro } from '../kokoro.js';
 import { s, num } from '../settings.js';
-import { money } from '../pricing.js';
+import { money, cop } from '../pricing.js';
 import { upsertUser, getUser, setState, credit, userOrders, referralStats } from '../users.js';
 import { setNotifier, refreshOrder, formatDelivery, stats } from '../orders.js';
 import { esc, fmtDate, STATUS_ES } from '../util.js';
@@ -46,13 +46,10 @@ export function createBot() {
     return next();
   });
 
-  // responde siempre a los botones para que no queden "cargando"
+  // responde al botón al instante (quita el "cargando" sin esperar a que termine la acción)
   bot.on('callback_query', async (ctx, next) => {
-    try {
-      await next();
-    } finally {
-      await ctx.answerCallbackQuery().catch(() => {});
-    }
+    ctx.answerCallbackQuery().catch(() => {});
+    await next();
   });
 
   // ---------- comandos ----------
@@ -93,7 +90,7 @@ export function createBot() {
   const startRecharge = async (ctx) => {
     await setState(ctx.from.id, { step: 'recharge_amount' });
     await ctx.reply(
-      `${s('payment_instructions')}\n\n✍️ Escribe el <b>monto</b> que vas a recargar (mínimo ${money(num('min_recharge'))} ${cur()}):`,
+      `${s('payment_instructions')}\n\n✍️ Escribe el <b>monto</b> en ${cur()} que vas a recargar (mínimo ${money(num('min_recharge'))}${cop(num('min_recharge')) ? ' ≈ ' + cop(num('min_recharge')) : ''})${cop(1) ? `\n💱 Tasa: 1 ${cur()} = ${cop(1)}` : ''}:`,
       { parse_mode: 'HTML', reply_markup: cancelKb() },
     );
   };
@@ -254,7 +251,7 @@ export function createBot() {
         return ctx.reply(`Escribe un monto válido (mínimo ${money(num('min_recharge'))}).`);
       }
       await setState(ctx.from.id, { step: 'recharge_proof', amount });
-      return ctx.reply(`📸 Perfecto: ${money(amount)} ${cur()}.\nAhora envía la <b>captura o foto del comprobante</b> de pago.`, { parse_mode: 'HTML', reply_markup: cancelKb() });
+      return ctx.reply(`📸 Perfecto: ${money(amount)} ${cur()}${cop(amount) ? ` → debes pagar <b>${cop(amount)}</b>` : ''}.\nAhora envía la <b>captura o foto del comprobante</b> de pago.`, { parse_mode: 'HTML', reply_markup: cancelKb() });
     }
     if (st?.step === 'recharge_proof') return ctx.reply('📸 Envía la captura del comprobante como imagen (o /cancelar).');
     if (await handleShopText(ctx, st, text)) return;

@@ -58,6 +58,11 @@ export async function products(fresh = false) {
     .map((p) => (p.displayName ? { ...p, name: p.displayName } : p));
 }
 
+// fresh=true (al pagar) solo vuelve a consultar el proveedor de ESE producto
 export async function findProduct(id, fresh = false) {
-  return (await allProducts(fresh)).find((p) => p.id === id) || null;
+  if (fresh) {
+    if (String(id).startsWith('bunny:')) await bunny.products(true).catch(() => {});
+    else await kokoro.products(true).catch(() => {});
+  }
+  return (await allProducts(false)).find((p) => p.id === id) || null;
 }

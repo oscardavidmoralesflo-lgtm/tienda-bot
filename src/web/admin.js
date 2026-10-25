@@ -6,8 +6,9 @@ import { one, many, query } from '../db.js';
 import { kokoro, clearCache } from '../kokoro.js';
 import { bunny, bunnyEnabled, balanceOf } from '../bunny.js';
 import * as catalog from '../catalog.js';
+import { warmUp, lastRefresh } from '../refresher.js';
 import { s, DEFAULTS, saveSettings } from '../settings.js';
-import { money, productUnitPrice, packPrice, gameFromPrice, getOverride, saveOverride } from '../pricing.js';
+import { money, productUnitPrice, packPrice, gameFromPrice, getOverride, saveOverride, tierPct, copRate } from '../pricing.js';
 import { credit } from '../users.js';
 import { stats, refreshOrder, refundOrder, notifyDelivered, deliverManually } from '../orders.js';
 import { esc, fmtDate, STATUS_ES } from '../util.js';
@@ -298,7 +299,7 @@ export function adminRouter(bot) {
     let products = [];
     let err = '';
     try {
-      if (req.query.fresh === '1') { clearCache(); bunny.clearCache(); }
+      if (req.query.fresh === '1') await Promise.allSettled([kokoro.products(true), bunny.products(true)]);
       products = await catalog.allProducts();
     } catch (e) {
       err = e.message;
@@ -306,7 +307,7 @@ export function adminRouter(bot) {
     const q = String(req.query.q || '').toLowerCase();
     if (q) products = products.filter((p) => p.name.toLowerCase().includes(q));
     products.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name) || a.price - b.price);
-    const body = `<p class="help">Margen general actual: <b>${esc(s('markup_products'))}%</b> (cámbialo en <a href="/admin/settings">Ajustes</a>). Aquí puedes poner un margen distinto o un precio fijo por producto, u ocultarlo del bot. Deja vacío para usar el margen general.</p>
+    const body = `<p class="help">Margen actual: <b>${s('price_tiers_products') ? 'por tramos ' + esc(s('price_tiers_products')) + ' + mínimo ' + esc(s('min_profit_products')) + ' USD por pedido' : esc(s('markup_products')) + '%'}</b> (cámbialo en <a href="/admin/settings">Ajustes</a>). Aquí puedes poner un margen distinto o un precio fijo por producto, u ocultarlo del bot. Deja vacío para usar el margen general.</p>
       ${err ? `<p class="bad">Error al leer el catálogo: ${esc(err)}</p>` : ''}
       ${catalog.bunnyStatus().error ? `<p class="bad">Bunny no respondió: ${esc(catalog.bunnyStatus().error)}</p>` : ''}
       <p class="help">🏦 = KOKORO · 🐰 = Bunny. Cuando un producto está en los dos, el bot muestra solo el <b>más barato con stock</b> (✅) y oculta el otro (⏸). Si el ganador se agota, cambia solo.</p>
@@ -317,7 +318,7 @@ export function adminRouter(bot) {
         const formId = `f_${crypto.createHash('md5').update(p.id).digest('hex').slice(0, 10)}`;
         return `<tr style="${p.winner ? '' : 'opacity:.55'}"><td>${esc(p.emoji_base || '')} ${esc(p.name)}${p.group ? `<div style="font-size:12px">${p.winner ? '✅ Se muestra como' : '⏸ Oculto (hay uno mejor):'} <b>${esc(p.group)}</b></div>` : ''}<div class="muted" style="font-size:11px">${esc(p.id)}</div></td><td>${p.source === 'bunny' ? '🐰' : '🏦'}</td><td>${p.stock}</td><td>${money(p.price)}</td>
         <td><b>${money(productUnitPrice(p))}</b></td>
-        <td><input form="${formId}" name="markup" class="w80" value="${o.markup ?? ''}" placeholder="${esc(s('markup_products'))}"></td>
+        <td><input form="${formId}" name="markup" class="w80" value="${o.markup ?? ''}" placeholder="${tierPct(Number(p.price), 'products')}"></td>
         <td><input form="${formId}" name="fixed_price" class="w80" value="${o.fixed_price ?? ''}"></td>
         <td><input form="${formId}" type="checkbox" name="hidden" ${o.hidden ? 'checked' : ''}></td>
         <td><form id="${formId}" method="post" action="/admin/overrides"><input type="hidden" name="item_id" value="${esc(p.id)}"><input type="hidden" name="kind" value="product">
@@ -339,7 +340,7 @@ export function adminRouter(bot) {
       err = e.message;
     }
     const tab = (k, l) => `<a class="btn" style="${k === kind && !q ? '' : 'background:transparent;color:var(--accent);border:1px solid var(--line)'}" href="/admin/games?kind=${k}">${l}</a>`;
-    const body = `<p class="help">Margen general de juegos: <b>${esc(s('markup_games'))}%</b>. Puedes poner un margen distinto por juego, o entrar a un juego para ajustar paquetes concretos.</p>
+    const body = `<p class="help">Margen de juegos: <b>${s('price_tiers_games') ? 'por tramos ' + esc(s('price_tiers_games')) : esc(s('markup_games')) + '%'}</b>. Puedes poner un margen distinto por juego, o entrar a un juego para ajustar paquetes concretos.</p>
       ${err ? `<p class="bad">Error al leer KOKORO: ${esc(err)}</p>` : ''}
       <div class="row" style="margin-bottom:12px">${tab('topup', '🎮 Recargas')}${tab('giftcard', '🎁 Gift cards')}${tab('key', '🔑 Keys')}
       <form class="row"><input name="q" value="${esc(q)}" placeholder="Buscar en todo el catálogo"><button>Buscar</button></form></div>
@@ -349,7 +350,7 @@ export function adminRouter(bot) {
         const formId = `g_${crypto.createHash('md5').update(g.id).digest('hex').slice(0, 10)}`;
         return `<tr><td><a href="/admin/game?id=${encodeURIComponent(g.id)}">${esc(g.emoji_base || '')} ${esc(g.name)}</a><div class="muted" style="font-size:11px">${esc(g.id)}${g.enabled === false ? ' · solo por búsqueda' : ''}</div></td>
         <td>${g.packs ?? ''}</td><td>${g.from_price != null ? money(g.from_price) : '—'}</td><td><b>${gameFromPrice(g) != null ? money(gameFromPrice(g)) : '—'}</b></td>
-        <td><input form="${formId}" name="markup" class="w80" value="${o.markup ?? ''}" placeholder="${esc(s('markup_games'))}"></td>
+        <td><input form="${formId}" name="markup" class="w80" value="${o.markup ?? ''}" placeholder="${tierPct(Number(g.from_price || 0), 'games')}"></td>
         <td><input form="${formId}" type="checkbox" name="hidden" ${o.hidden ? 'checked' : ''}></td>
         <td><form id="${formId}" method="post" action="/admin/overrides"><input type="hidden" name="item_id" value="${esc(g.id)}"><input type="hidden" name="kind" value="game">
         <input type="hidden" name="name" value="${esc(g.name)}"><input type="hidden" name="back" value="/admin/games?kind=${kind}${q ? `&q=${encodeURIComponent(q)}` : ''}"><button>Guardar</button></form></td></tr>`;
@@ -418,8 +419,14 @@ export function adminRouter(bot) {
   // ---------- ajustes ----------
   const FIELDS = [
     ['shop_name', 'Nombre de la tienda', 'text'],
-    ['markup_products', 'Margen de ganancia en productos (%)', 'number', 'Se suma al costo de KOKORO. Ej: 20 = cobras 20% más.'],
-    ['markup_games', 'Margen de ganancia en juegos / gift cards / keys (%)', 'number'],
+    ['price_tiers_products', 'Margen por tramos — productos', 'text', 'Formato COSTO_MÁX:%. Ej: 1:60,3:40,10:30,30:20,*:12 = si cuesta hasta 1 USD ganas 60 %, hasta 3 USD 40 %… y el resto 12 %. Vacío = usar el margen general.'],
+    ['min_profit_products', 'Ganancia mínima por pedido — productos (USD)', 'number', 'Para que los productos muy baratos también dejen ganancia. Ej: 0.20'],
+    ['price_tiers_games', 'Margen por tramos — juegos, gift cards y keys', 'text', 'Las recargas de juegos son muy competidas: usa márgenes más bajos. Ej: 5:20,20:12,*:8'],
+    ['min_profit_games', 'Ganancia mínima por pedido — juegos (USD)', 'number'],
+    ['markup_products', 'Margen general productos (%) (si no hay tramos)', 'number'],
+    ['markup_games', 'Margen general juegos (%) (si no hay tramos)', 'number'],
+    ['cop_rate', 'Pesos colombianos por 1 USD', 'text', 'auto = tasa del día + el margen de abajo (recomendado). También puedes poner un número fijo (ej: 3300) o 0 para no mostrar COP.'],
+    ['cop_spread', 'Margen sobre la tasa automática (%)', 'number', 'Cubre lo que te cuesta convertir pesos a USDT (Binance P2P suele estar 1-4 % arriba). Recomendado: 3.'],
     ['referral_percent', 'Comisión por referido (%)', 'number', 'Lo que gana un cliente por cada compra de sus invitados. 0 = desactivado. Sale de tu ganancia.'],
     ['min_recharge', 'Recarga mínima', 'number'],
     ['currency', 'Moneda que se muestra', 'text'],
@@ -440,7 +447,9 @@ export function adminRouter(bot) {
       <p>API KOKORO: <code>${esc(config.kokoroBase)}</code> · token ${config.kokoroToken ? '✅ configurado' : '<span class="bad">falta</span>'}</p>
       <p>Admins de Telegram: ${config.adminIds.length ? config.adminIds.map((i) => `<code>${i}</code>`).join(', ') : '<span class="bad">ninguno (pon ADMIN_IDS)</span>'}</p>
       <p>URL pública: ${config.publicUrl ? esc(config.publicUrl) : '<span class="muted">modo local (polling)</span>'}</p>
-      <form method="post" action="/admin/cache"><button class="ghost">🔄 Vaciar caché del catálogo</button></form></div>`;
+      <p>Tasa COP en uso: ${copRate() ? '1 USD = ' + copRate().toLocaleString('es-CO') + ' COP' : 'desactivada'}</p>
+      <p>Precios y stock: se actualizan solos cada 3 minutos. Última vez: ${lastRefresh.at ? fmtDate(lastRefresh.at) + ' UTC (' + (lastRefresh.ms / 1000).toFixed(1) + ' s, ' + lastRefresh.ok + '/' + lastRefresh.total + ' listas)' : 'pendiente'}</p>
+      <form method="post" action="/admin/cache"><button class="ghost">🔄 Actualizar catálogo ahora</button></form></div>`;
     render(req, res, 'Ajustes', body);
   });
   r.post('/settings', async (req, res) => {
@@ -456,12 +465,13 @@ export function adminRouter(bot) {
     }
     values.maintenance = req.body.maintenance ? '1' : '0';
     await saveSettings(values);
-    clearCache();
     back(res, '/admin/settings', 'Ajustes guardados');
   });
-  r.post('/cache', (req, res) => {
+  r.post('/cache', async (req, res) => {
     clearCache();
-    back(res, '/admin/settings', 'Caché vaciada');
+    bunny.clearCache();
+    await warmUp().catch(() => {});
+    back(res, '/admin/settings', 'Catálogo recargado desde los proveedores');
   });
 
   return r;

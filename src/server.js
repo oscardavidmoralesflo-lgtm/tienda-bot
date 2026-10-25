@@ -9,6 +9,7 @@ import { verifyWebhook } from './kokoro.js';
 import { handleWebhook, pollOpenOrders } from './orders.js';
 import { createBot, setupCommands } from './bot/index.js';
 import { adminRouter } from './web/admin.js';
+import { warmUp, startRefresher } from './refresher.js';
 
 const missing = checkConfig();
 if (missing.length) {
@@ -70,6 +71,10 @@ app.listen(config.port, async () => {
     bot.start({ allowed_updates: ['message', 'callback_query'], onStart: () => console.log('✅ Bot escuchando (modo local)') });
   }
 });
+
+// Precios y stock: carga inicial y refresco cada 3 minutos
+warmUp().catch((e) => console.error('warmUp', e.message));
+startRefresher();
 
 // Revisa pedidos abiertos cada 45 s
 setInterval(() => pollOpenOrders().catch((e) => console.error('poll', e.message)), 45_000);

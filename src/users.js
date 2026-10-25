@@ -1,20 +1,17 @@
 import { one, many, query, tx } from './db.js';
 
+// Una sola consulta por mensaje (crea o actualiza). El referido solo se guarda al crear el usuario.
 export async function upsertUser(from, referredBy = null) {
-  const existing = await one('SELECT * FROM users WHERE id = $1', [from.id]);
-  if (existing) {
-    await query('UPDATE users SET username=$2, first_name=$3, last_seen=now(), blocked_bot=FALSE WHERE id=$1', [
-      from.id, from.username || null, from.first_name || null,
-    ]);
-    return { ...existing, username: from.username || null, first_name: from.first_name || null, isNew: false };
-  }
-  const ref = referredBy && Number(referredBy) !== from.id ? await one('SELECT id FROM users WHERE id=$1', [referredBy]) : null;
+  const ref = referredBy && Number(referredBy) !== from.id ? Number(referredBy) : null;
   const u = await one(
-    `INSERT INTO users (id, username, first_name, referred_by) VALUES ($1,$2,$3,$4)
-     ON CONFLICT (id) DO UPDATE SET last_seen=now() RETURNING *`,
-    [from.id, from.username || null, from.first_name || null, ref ? ref.id : null],
+    `INSERT INTO users (id, username, first_name, referred_by)
+     VALUES ($1, $2, $3, (SELECT id FROM users WHERE id = $4))
+     ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, first_name = EXCLUDED.first_name,
+       last_seen = now(), blocked_bot = FALSE
+     RETURNING *, (xmax = 0) AS is_new`,
+    [from.id, from.username || null, from.first_name || null, ref],
   );
-  return { ...u, isNew: true };
+  return { ...u, isNew: !!u.is_new };
 }
 
 export const getUser = (id) => one('SELECT * FROM users WHERE id = $1', [id]);

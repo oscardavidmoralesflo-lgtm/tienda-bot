@@ -1,6 +1,6 @@
 // Calcula tus precios de venta a partir del costo de KOKORO + tu margen.
 import { many, query } from './db.js';
-import { num } from './settings.js';
+import { num, s as setting } from './settings.js';
 
 let overrides = new Map();
 
@@ -34,8 +34,30 @@ export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 10
 const ceil2 = (n) => Math.ceil(Math.round(n * 100 * 1000) / 1000) / 100;
 export const money = (n) => Number(n || 0).toFixed(2);
 
-function applyMarkup(cost, markup) {
-  return Math.max(ceil2(cost * (1 + markup / 100)), 0.01);
+function applyMarkup(cost, markup, minProfit = 0) {
+  return Math.max(ceil2(Math.max(cost * (1 + markup / 100), cost + minProfit)), 0.01);
+}
+
+// Tramos de margen: "1:60,3:40,10:30,30:20,*:12" = costo hasta 1 USD → 60 %, hasta 3 USD → 40 %, … el resto 12 %
+const tierCache = new Map();
+export function parseTiers(text) {
+  if (tierCache.has(text)) return tierCache.get(text);
+  const tiers = String(text || '')
+    .split(',')
+    .map((t) => t.trim().split(':'))
+    .filter(([a, b]) => a && b !== undefined && !Number.isNaN(Number(b)))
+    .map(([a, b]) => ({ max: a.trim() === '*' ? Infinity : Number(a), pct: Number(b) }))
+    .filter((t) => !Number.isNaN(t.max))
+    .sort((x, y) => x.max - y.max);
+  tierCache.set(text, tiers);
+  return tiers;
+}
+// % que corresponde a un costo: por tramos si hay, si no el margen general
+export function tierPct(cost, kind) {
+  const tiers = parseTiers(setting(kind === 'games' ? 'price_tiers_games' : 'price_tiers_products'));
+  const t = tiers.find((x) => cost <= x.max);
+  if (t) return t.pct;
+  return num(kind === 'games' ? 'markup_games' : 'markup_products');
 }
 
 // ---- Productos digitales ----
@@ -55,8 +77,9 @@ export function productUnitPrice(product, qty = 1) {
     const ratio = Number(product.price) > 0 ? cost / Number(product.price) : 1;
     return round2(Number(o.fixed_price) * ratio);
   }
-  const markup = o?.markup != null ? Number(o.markup) : num('markup_products');
-  return applyMarkup(cost, markup);
+  const markup = o?.markup != null ? Number(o.markup) : tierPct(cost, 'products');
+  // la ganancia mínima es por pedido: en compras por volumen se reparte entre las unidades
+  return applyMarkup(cost, markup, num('min_profit_products') / Math.max(1, qty));
 }
 
 // ---- Juegos (packs) ----
@@ -64,13 +87,31 @@ export function packPrice(pack, gameId) {
   const po = getOverride(pack.id);
   if (po?.fixed_price != null) return round2(po.fixed_price);
   const go = getOverride(gameId || pack.game_id);
-  const markup = po?.markup != null ? Number(po.markup) : go?.markup != null ? Number(go.markup) : num('markup_games');
-  return applyMarkup(Number(pack.price), markup);
+  const cost = Number(pack.price);
+  const markup = po?.markup != null ? Number(po.markup) : go?.markup != null ? Number(go.markup) : tierPct(cost, 'games');
+  return applyMarkup(cost, markup, num('min_profit_games'));
 }
 
 export function gameFromPrice(game) {
   if (game.from_price == null) return null;
   const go = getOverride(game.id);
-  const markup = go?.markup != null ? Number(go.markup) : num('markup_games');
-  return applyMarkup(Number(game.from_price), markup);
+  const cost = Number(game.from_price);
+  const markup = go?.markup != null ? Number(go.markup) : tierPct(cost, 'games');
+  return applyMarkup(cost, markup, num('min_profit_games'));
 }
+
+// Equivalente en pesos colombianos (redondeado hacia arriba a 100 COP). Vacío si no hay tasa.
+let autoCop = null; // tasa USD→COP del día (la actualiza el refresco automático)
+export const setAutoCop = (v) => { autoCop = Number(v) || null; };
+export function copRate() {
+  const v = String(setting('cop_rate') || '').trim().toLowerCase();
+  if (v === 'auto') return autoCop ? Math.ceil(autoCop * (1 + num('cop_spread') / 100)) : 0;
+  return Number(v) > 0 ? Number(v) : 0;
+}
+export function cop(usd) {
+  const rate = copRate();
+  if (!(rate > 0)) return '';
+  const v = Math.ceil((Number(usd) * rate) / 100) * 100;
+  return v.toLocaleString('es-CO') + ' COP';
+}
+export const copSuffix = (usd) => (cop(usd) ? ` (≈ ${cop(usd)})` : '');

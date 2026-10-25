@@ -22,6 +22,8 @@ const { kokoro } = await import('../src/kokoro.js');
 
 await initDb();
 await loadSettings();
+// las pruebas de cobros usan un margen fijo simple (20 % / 15 %); los tramos se prueban al final
+await saveSettings({ price_tiers_products: '', price_tiers_games: '', min_profit_products: '0', min_profit_games: '0' });
 await pricing.loadOverrides();
 const sent = [];
 orders.setNotifier({ user: async (id, t) => sent.push([id, t]), admins: async (t) => sent.push(['admin', t]) });
@@ -168,6 +170,36 @@ await test('ajustes guardados', async () => {
   await saveSettings({ markup_products: '30' });
   const [netflix] = await kokoro.products();
   assert.equal(pricing.productUnitPrice(netflix), 3.9);
+});
+
+await test('margen por tramos + ganancia mínima por pedido + precio en COP', async () => {
+  await saveSettings({ price_tiers_products: '1:60,3:40,10:30,30:20,*:12', min_profit_products: '0.20', price_tiers_games: '5:20,20:12,*:8', min_profit_games: '0.10', cop_rate: '4100' });
+  const p = (c, extra = {}) => ({ id: 'x' + c, price: c, bulk_discounts: [], ...extra });
+  assert.equal(pricing.productUnitPrice(p(0.04)), 0.24);        // barato: manda la ganancia mínima (0.04 + 0.20)
+  assert.equal(pricing.productUnitPrice(p(0.04), 10), 0.07);    // por volumen la mínima se reparte: 0.04 + 0.02 → 60 % = 0.07
+  assert.equal(pricing.productUnitPrice(p(1.5)), 2.1);          // hasta 3 USD: 40 %
+  assert.equal(pricing.productUnitPrice(p(8)), 10.4);           // hasta 10 USD: 30 %
+  assert.equal(pricing.productUnitPrice(p(124.76)), 139.74);    // caro: 12 %
+  assert.equal(pricing.packPrice({ id: 'pk', price: 0.74 }, 'g'), 0.89); // recarga barata: 20 %
+  assert.equal(pricing.packPrice({ id: 'pk2', price: 38 }, 'g'), 41.04); // recarga cara: 8 %
+  assert.equal(pricing.cop(2.1), '8.700 COP');
+  await saveSettings({ cop_rate: '0' });
+  assert.equal(pricing.copSuffix(2.1), '');
+});
+
+await test('caché: responde al instante con dato viejo y refresca en segundo plano', async () => {
+  const cache = await import('../src/cache.js');
+  let calls = 0;
+  const slow = () => new Promise((r) => setTimeout(() => r(++calls), 300));
+  assert.equal(await cache.swr('t:x', slow, 1), 1);           // primera vez espera
+  await new Promise((r) => setTimeout(r, 5));                  // ya venció (ttl 1 ms)
+  const t = Date.now();
+  assert.equal(await cache.swr('t:x', slow, 1), 1);           // devuelve el viejo sin esperar
+  assert.ok(Date.now() - t < 50);
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(await cache.swr('t:x', slow, 60_000), 2);      // ya quedó el nuevo
+  const r = await cache.refreshAll({ always: ['t:x'] });
+  assert.ok(r.ok >= 1);
 });
 
 console.log(`\n${pass} pruebas OK`);
