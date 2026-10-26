@@ -8,6 +8,10 @@ export const config = {
   kokoroBase: (process.env.KOKORO_BASE_URL || 'https://api.shopdigital.app').replace(/\/$/, ''),
   // Segundo proveedor (opcional): Bunny AI Store
   bunnyKey: process.env.BUNNY_API_KEY || '',
+  // Recargas automáticas con Bold (llave de identidad y llave secreta de "Botón de pagos")
+  boldApiKey: process.env.BOLD_API_KEY || '',
+  boldSecretKey: process.env.BOLD_SECRET_KEY || '',
+  boldBase: (process.env.BOLD_BASE_URL || 'https://integrations.api.bold.co').replace(/\/$/, ''),
   bunnyBase: (process.env.BUNNY_BASE_URL || 'https://bunnytoolsbot.tech/api/v1').replace(/\/$/, ''),
   // Sin DATABASE_URL se usa una base de datos local en ./data (solo para pruebas en tu PC)
   databaseUrl: process.env.DATABASE_URL || '',

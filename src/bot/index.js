@@ -11,6 +11,7 @@ import { iconOf } from '../categories.js';
 import { levelOf } from '../loyalty.js';
 import { t, localName, userLang, rememberLang, normLang } from '../i18n.js';
 import { MENU, LEGACY, LINE, show, cancelKb, navRow, cut } from './ui.js';
+import { bold, boldEnabled } from '../bold.js';
 import { registerShop, handleShopText, showStore, showGames, bestSellers, doSearch } from './shop.js';
 
 // "100000:3,200000:5" → % de bono para un monto en pesos
@@ -224,7 +225,57 @@ export function createBot() {
   bot.callbackQuery(/^amt:(\d+)$/, (ctx) => askProof(ctx, Number(ctx.match[1])));
   bot.callbackQuery(/^amc:(\d+)$/, (ctx) => {
     const pesos = Number(ctx.match[1]);
-    return askProof(ctx, round4(pesos / copRate()), pesos);
+    return chooseMethod(ctx, round4(pesos / copRate()), pesos);
+  });
+
+  // ---------- recarga automática con Bold ----------
+  // total que paga el cliente en línea (monto + % de la pasarela, redondeado a la centena)
+  const onlineTotal = (pesos) => Math.ceil((pesos * (1 + num('bold_surcharge') / 100)) / 100) * 100;
+  const chooseMethod = async (ctx, amount, pesos) => {
+    if (!pesos || !boldEnabled()) return askProof(ctx, amount, pesos);
+    await setState(ctx.from.id, { step: 'recharge_method', amount, cop: pesos });
+    const pct = rechargeBonusPct(pesos);
+    const fee = num('bold_surcharge');
+    const total = onlineTotal(pesos);
+    const text = T(ctx, 'rc_choose', {
+      amt: `${pesosTxt(pesos)} COP`,
+      bonus: pct ? ` · 🎉 +${pct}%` : '',
+      line: LINE,
+      fee: fee > 0 ? T(ctx, 'rc_fee_note', { pct: fee }) : '',
+    });
+    const kb = new InlineKeyboard()
+      .text(T(ctx, 'btn_pay_online', { total: pesosTxt(total) }), 'pon').row()
+      .text(T(ctx, 'btn_pay_manual'), 'pmn').row()
+      .text(T(ctx, 'btn_cancel'), 'x');
+    await show(ctx, text, kb);
+  };
+  bot.callbackQuery('pmn', async (ctx) => {
+    const st = ctx.dbUser.state;
+    if (st?.step !== 'recharge_method') return startRecharge(ctx);
+    return askProof(ctx, st.amount, st.cop);
+  });
+  bot.callbackQuery('pon', async (ctx) => {
+    const st = ctx.dbUser.state;
+    if (st?.step !== 'recharge_method' || !boldEnabled()) return startRecharge(ctx);
+    await setState(ctx.from.id, null);
+    const total = onlineTotal(st.cop);
+    const r = await one(
+      `INSERT INTO recharges (user_id, amount, amount_cop, method, status, bold_total) VALUES ($1,$2,$3,'bold','link',$4) RETURNING *`,
+      [ctx.from.id, st.amount, st.cop, total],
+    );
+    const ref = `${config.shopPrefix}rc${r.id}t${Date.now().toString(36)}`;
+    try {
+      const link = await bold.createLink({ pesos: total, reference: ref, description: `${s('shop_name')} · Recarga #${r.id}` });
+      if (!link.url) throw new Error('Bold no devolvió el link');
+      await query('UPDATE recharges SET bold_link=$2, bold_url=$3, bold_ref=$4 WHERE id=$1', [r.id, link.id, link.url, ref]);
+      const kb = new InlineKeyboard().url(T(ctx, 'btn_open_link', { total: pesosTxt(total) }), link.url).row().text(T(ctx, 'btn_menu'), 'm');
+      await show(ctx, T(ctx, 'rc_link', { amt: `${pesosTxt(st.cop)} COP`, line: LINE, total: `${pesosTxt(total)} COP` }), kb);
+    } catch (e) {
+      console.error('Bold link', e.message);
+      await query("UPDATE recharges SET status='failed', handled_by=$2 WHERE id=$1", [r.id, `bold: ${String(e.message).slice(0, 80)}`]);
+      await setState(ctx.from.id, { step: 'recharge_method', amount: st.amount, cop: st.cop });
+      await show(ctx, T(ctx, 'rc_link_error'), new InlineKeyboard().text(T(ctx, 'btn_pay_manual'), 'pmn').row().text(T(ctx, 'btn_menu'), 'm'));
+    }
   });
 
   // El admin configura el QR de cobro enviándole al bot la foto con el texto /qr
@@ -367,7 +418,7 @@ export function createBot() {
   async function handleRecharge(id, approve, by, amountOverride) {
     const r = await one(
       `UPDATE recharges SET status=$2, handled_by=$3, handled_at=now(), amount=COALESCE($4, amount)
-       WHERE id=$1 AND status='pending' RETURNING *`,
+       WHERE id=$1 AND status IN ('pending','link') RETURNING *`,
       [id, approve ? 'approved' : 'rejected', by, amountOverride ?? null],
     );
     if (!r) return { ok: false, error: 'Ya fue procesada' };
@@ -392,6 +443,51 @@ export function createBot() {
     return { ok: true, recharge: r };
   }
   bot.handleRecharge = handleRecharge;
+
+  // Webhook de Bold: SALE_APPROVED acredita la recarga; SALE_REJECTED avisa al cliente
+  async function findBoldRecharge(reference) {
+    if (!reference) return null;
+    return one("SELECT * FROM recharges WHERE method='bold' AND (bold_link=$1 OR bold_ref=$1) ORDER BY id DESC LIMIT 1", [reference]);
+  }
+  bot.handleBoldEvent = async (ev) => {
+    const data = ev?.data || {};
+    const ref = data.metadata?.reference || data.reference;
+    const r = await findBoldRecharge(ref);
+    if (!r) return { ok: false, reason: 'recarga no encontrada' };
+    if (ev.type === 'SALE_APPROVED') {
+      if (r.status !== 'link') return { ok: true, reason: 'ya procesada' };
+      const paid = Number(data.amount?.total || 0);
+      if (paid && Number(r.bold_total) && paid + 1 < Number(r.bold_total)) {
+        await notifyAdmins(`⚠️ Bold: la recarga #${r.id} se pagó con un monto menor (${pesosTxt(paid)} de ${pesosTxt(r.bold_total)}). Revísala en el panel.`);
+        await query("UPDATE recharges SET status='pending', handled_by='bold: monto menor' WHERE id=$1 AND status='link'", [r.id]);
+        return { ok: false, reason: 'monto menor' };
+      }
+      return handleRecharge(r.id, true, `bold:${data.payment_method || 'online'}`);
+    }
+    if (ev.type === 'SALE_REJECTED' && r.status === 'link') {
+      const ul = await userLang(r.user_id);
+      const kb = r.bold_url ? new InlineKeyboard().url(t(ul, 'btn_open_link', { total: pesosTxt(r.bold_total) }), r.bold_url) : undefined;
+      await sendTo(r.user_id, t(ul, 'rc_link_rejected', { id: r.id }), kb ? { reply_markup: kb } : {});
+    }
+    return { ok: true };
+  };
+  // Por si un webhook no llega: revisa los links abiertos (cada pocos minutos)
+  bot.pollBold = async () => {
+    if (!boldEnabled()) return;
+    const open = await many("SELECT * FROM recharges WHERE method='bold' AND status='link' AND bold_link IS NOT NULL ORDER BY id LIMIT 20");
+    for (const r of open) {
+      try {
+        const l = await bold.getLink(r.bold_link);
+        const st = l.status || l.payload?.status;
+        if (st === 'PAID') await handleRecharge(r.id, true, 'bold:verificado');
+        else if (['EXPIRED', 'CANCELLED'].includes(st) || Date.now() - new Date(r.created_at).getTime() > 48 * 3600_000) {
+          await query("UPDATE recharges SET status='expired', handled_at=now() WHERE id=$1 AND status='link'", [r.id]);
+        }
+      } catch (e) {
+        console.error('Bold poll', r.id, e.message);
+      }
+    }
+  };
 
   // ---------- texto libre: atajos, pasos y búsqueda ----------
   bot.on('message:text', async (ctx) => {
@@ -418,7 +514,7 @@ export function createBot() {
       if (copMode()) {
         const pesos = Number(text.replace(/[^\d]/g, ''));
         if (!pesos || pesos < minCop() || pesos > 20_000_000) return ctx.reply(T(ctx, 'rc_bad_cop', { min: pesosTxt(minCop()) }));
-        return askProof(ctx, round4(pesos / copRate()), pesos);
+        return chooseMethod(ctx, round4(pesos / copRate()), pesos);
       }
       const amount = Number(text.replace(',', '.').replace(/[^\d.]/g, ''));
       if (!amount || amount < num('min_recharge') || amount > 100000) {

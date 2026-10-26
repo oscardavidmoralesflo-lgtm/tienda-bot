@@ -87,3 +87,11 @@ CREATE INDEX IF NOT EXISTS orders_renew_idx ON orders (renew_at) WHERE reminded 
 
 -- Idioma elegido por el cliente (es / en). NULL = aún no lo eligió
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT;
+
+-- Recargas automáticas con Bold
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS method TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_link TEXT;
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_url TEXT;
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_ref TEXT;
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_total NUMERIC(14,0);
+CREATE INDEX IF NOT EXISTS recharges_bold_link_idx ON recharges (bold_link);

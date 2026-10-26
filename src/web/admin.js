@@ -176,7 +176,7 @@ export function adminRouter(bot) {
   // ---------- recargas ----------
   r.get('/recharges', async (req, res) => {
     const pending = await many("SELECT r.*, u.first_name, u.username FROM recharges r LEFT JOIN users u ON u.id=r.user_id WHERE r.status='pending' ORDER BY r.id");
-    const done = await many("SELECT r.*, u.first_name, u.username FROM recharges r LEFT JOIN users u ON u.id=r.user_id WHERE r.status<>'pending' ORDER BY r.id DESC LIMIT 50");
+    const done = await many("SELECT r.*, u.first_name, u.username FROM recharges r LEFT JOIN users u ON u.id=r.user_id WHERE r.status<>'pending' ORDER BY r.id DESC LIMIT 80");
     const proofUrl = (x) => `/admin/file?id=${encodeURIComponent(x.proof_file_id)}`;
     const proof = (x) => (x.proof_file_id
       ? (x.proof_type === 'photo'
@@ -198,7 +198,7 @@ export function adminRouter(bot) {
       <div class="sec-title">Historial</div>
       <div class="card"><div class="tablewrap"><table><thead><tr><th>#</th><th>Cliente</th><th class="r">Monto</th><th>Estado</th><th>Aprobada por</th><th>Fecha</th></tr></thead><tbody>
       ${done.map((x) => `<tr><td class="muted">#${x.id}</td><td><a href="/admin/users/${x.user_id}">${who(x, x.user_id)}</a></td><td class="r num"><b>${money(x.amount)}</b></td>
-        <td>${x.status === 'approved' ? '<span class="badge b-ok">Aprobada</span>' : '<span class="badge b-bad">Rechazada</span>'}</td><td class="muted">${esc(x.handled_by || '')}</td><td class="muted">${fmtDate(x.handled_at)}</td></tr>`).join('') || `<tr><td colspan="6">${emptyBox('🧾', 'Aún no hay historial')}</td></tr>`}
+        <td>${x.status === 'approved' ? '<span class="badge b-ok">Aprobada</span>' : x.status === 'link' ? '<span class="badge b-info">Esperando pago en línea</span>' : x.status === 'expired' ? '<span class="badge b-muted">Link vencido</span>' : x.status === 'failed' ? '<span class="badge b-bad">Error al crear link</span>' : '<span class="badge b-bad">Rechazada</span>'} ${x.method === 'bold' ? '<span class="badge b-brand">⚡ Bold</span>' : ''}${x.amount_cop ? ` <span class="muted">${Number(x.amount_cop).toLocaleString('es-CO')}</span>` : ''}</td><td class="muted">${esc(x.handled_by || '')}</td><td class="muted">${fmtDate(x.handled_at)}</td></tr>`).join('') || `<tr><td colspan="6">${emptyBox('🧾', 'Aún no hay historial')}</td></tr>`}
       </tbody></table></div></div>`;
     await render(req, res, 'Recargas', body, { subtitle: 'Revisa el comprobante, corrige el monto si hace falta y aprueba con un clic. El cliente recibe el aviso al instante.' });
   });
@@ -556,6 +556,11 @@ export function adminRouter(bot) {
       ['min_recharge', 'Recarga mínima (USD)', 'number', 'En pesos se redondea a miles. Ej: 3 USD ≈ $10.000.'],
       ['currency', 'Moneda interna', 'text'],
     ]],
+    ['bold', 'bolt', 'Recargas automáticas (Bold)', 'PSE, Nequi y Botón Bancolombia se acreditan solos', [
+      ['bold_enabled', 'Activar pagos en línea (1 = sí, 0 = no)', 'text', 'Requiere BOLD_API_KEY y BOLD_SECRET_KEY en el servidor.'],
+      ['bold_surcharge', 'Comisión que paga el cliente en línea (%)', 'number', 'Cubre lo que cobra Bold para que no se coma tu ganancia. La transferencia manual sigue sin comisión. 0 = la asumes tú.'],
+      ['bold_methods', 'Métodos permitidos', 'text', 'Separados por coma: PSE, NEQUI, BOTON_BANCOLOMBIA, CREDIT_CARD'],
+    ]],
     ['crecimiento', 'users', 'Fidelización y referidos', 'Haz que tus clientes vuelvan', [
       ['cashback_tiers', 'Ñapa por nivel', 'text', 'Formato COMPRADO_USD:%. Ej: 10:1,50:2,200:3 = Plata 1 %, Oro 2 %, Diamante 3 % devuelto en saldo en cada compra. Vacío = sin ñapa.'],
       ['renew_reminder_days', 'Recordar renovación (días antes de vencer)', 'number', 'El bot avisa al cliente antes de que venza su suscripción, con botón para renovar. 0 = desactivado.'],
@@ -578,6 +583,7 @@ export function adminRouter(bot) {
         <div class="card"><h3>${icon('link')} Conexiones</h3><p class="sub">Proveedores y Telegram</p>
           <div class="grid" style="gap:10px">
           <div class="split"><span>🏦 API KOKORO</span>${config.kokoroToken ? '<span class="badge b-ok">Conectada</span>' : '<span class="badge b-bad">Falta token</span>'}</div>
+          <div class="split"><span>⚡ Bold (pagos en línea)</span>${config.boldApiKey && config.boldSecretKey ? '<span class="badge b-ok">Conectado</span>' : '<span class="badge b-warn">Sin llaves</span>'}</div>
           <div class="split"><span>🐰 API Bunny</span>${bunnyEnabled() ? '<span class="badge b-ok">Conectada</span>' : '<span class="badge b-warn">Sin API key</span>'}</div>
           <div class="split"><span>🤖 Bot</span><a href="https://t.me/${esc(bot.botInfo?.username || '')}" target="_blank">@${esc(bot.botInfo?.username || '')}</a></div>
           <div class="split"><span>👤 Admins</span><span class="num muted">${config.adminIds.join(', ') || '—'}</span></div></div></div>

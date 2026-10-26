@@ -9,6 +9,10 @@ process.env.DATABASE_URL = '';
 process.env.PUBLIC_URL = '';
 process.env.BUNNY_API_KEY = 'bn_test';
 process.env.BUNNY_BASE_URL = 'http://localhost:4010/bunny/api/v1';
+process.env.BOLD_API_KEY = 'bold_test';
+process.env.BOLD_SECRET_KEY = 'bold_secret_test';
+process.env.BOLD_BASE_URL = 'http://localhost:4010/bold';
+process.env.BOT_TOKEN = '1:test';
 process.chdir(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 rmSync('./data', { recursive: true, force: true });
 
@@ -288,6 +292,60 @@ await test('bono por recarga grande', async () => {
   assert.equal(rechargeBonusPct(50000), 0);
   assert.equal(rechargeBonusPct(100000), 3);
   assert.equal(rechargeBonusPct(250000), 5);
+});
+
+await test('Bold: recarga en línea se acredita sola (con bono), sin duplicados y con firma válida', async () => {
+  const crypto = await import('node:crypto');
+  const { verifyBoldSignature } = await import('../src/bold.js');
+  const { createBot } = await import('../src/bot/index.js');
+  await saveSettings({ cop_rate: '4000', price_display: 'cop', recharge_bonus: '100000:3,200000:5', bold_surcharge: '3.5', bold_enabled: '1' });
+  // bot real con la API de Telegram interceptada
+  const out = [];
+  const bot = createBot();
+  bot.api.config.use(async (prev, method, payload) => {
+    if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Nova Plus', username: 'NovaPlusTestBot' } };
+    if (['sendMessage', 'editMessageText'].includes(method)) out.push({ to: payload.chat_id, text: payload.text, kb: payload.reply_markup?.inline_keyboard || [] });
+    return { ok: true, result: { message_id: 1, date: 0, chat: { id: payload.chat_id || 1, type: 'private' }, text: payload.text } };
+  });
+  await bot.init();
+  const from = { id: 4242, is_bot: false, first_name: 'Ana' };
+  const { query: q } = await import('../src/db.js');
+  await users.upsertUser(from);
+  await q("UPDATE users SET lang='es' WHERE id=4242");
+  let uid = 1;
+  const tap = (data) => bot.handleUpdate({ update_id: uid++, callback_query: { id: String(uid), from, chat_instance: '1', data, message: { message_id: 5, date: 0, chat: { id: 4242, type: 'private' }, text: 'x' } } });
+  await tap('amc:100000');
+  assert.ok(out.at(-1).text.includes('¿Cómo quieres pagar?'));
+  assert.ok(out.at(-1).kb.flat().some((b) => b.callback_data === 'pon' && b.text.includes('$103.500')));
+  await tap('pon');
+  const linkMsg = out.at(-1);
+  assert.ok(linkMsg.kb.flat().some((b) => b.url === 'https://checkout.bold.co/LNK_TEST1'));
+  const r = await one("SELECT * FROM recharges WHERE user_id=4242 AND method='bold'");
+  assert.equal(r.status, 'link');
+  assert.equal(Number(r.bold_total), 103500);
+  // firma del webhook
+  const ev = { id: 'evt1', type: 'SALE_APPROVED', data: { payment_method: 'PSE', amount: { currency: 'COP', total: 103500 }, metadata: { reference: r.bold_link } } };
+  const raw = JSON.stringify(ev);
+  const sig = crypto.createHmac('sha256', 'bold_secret_test').update(Buffer.from(raw).toString('base64')).digest('hex');
+  assert.ok(verifyBoldSignature(raw, sig));
+  assert.ok(!verifyBoldSignature(raw, sig.replace(/.$/, '0')));
+  // pago aprobado → saldo + bono 3 %
+  const before = (await users.getUser(4242)).balance;
+  await bot.handleBoldEvent(ev);
+  const after = (await users.getUser(4242)).balance;
+  assert.equal(pricing.round4(after - before), pricing.round4(25 * 1.03)); // 100.000 / 4.000 = 25 USD + 3 %
+  assert.ok(out.some((m) => m.to === 4242 && m.text.includes('¡Recarga aprobada!') && m.text.includes('Bono')));
+  // Bold reenvía el mismo aviso: no se acredita dos veces
+  await bot.handleBoldEvent(ev);
+  assert.equal((await users.getUser(4242)).balance, after);
+  // respaldo: si el webhook no llega, la verificación periódica lo detecta
+  await tap('amc:20000');
+  await tap('pon');
+  const r2 = await one("SELECT * FROM recharges WHERE user_id=4242 AND method='bold' ORDER BY id DESC LIMIT 1");
+  mock.boldLinks.get(r2.bold_link).status = 'PAID';
+  await bot.pollBold();
+  assert.equal((await one('SELECT status FROM recharges WHERE id=$1', [r2.id])).status, 'approved');
+  await saveSettings({ cop_rate: '0' });
 });
 
 console.log(`\n${pass} pruebas OK`);

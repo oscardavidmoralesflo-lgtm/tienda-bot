@@ -40,6 +40,23 @@ export function startMock(port = 4010) {
     res.json({ status: 'success', order: { order_code: 'BN-TEST-1', product_name: p.name, base_price: p.base_price, delivered_item: 'https://gemini.link/abc', warranty_info: p.warranty_info } });
   });
 
+  // ---- Bold simulado (links de pago) ----
+  const boldLinks = new Map();
+  app.use('/bold', (req, res, next) => (req.headers.authorization === 'x-api-key bold_test' ? next() : res.status(401).json({ payload: null, errors: [{ message: 'unauthorized' }] })));
+  app.post('/bold/online/link/v1', (req, res) => {
+    const { amount_type, amount, reference, payment_methods } = req.body;
+    if (amount_type !== 'CLOSE' || !amount?.total_amount || !reference) return res.status(400).json({ payload: null, errors: [{ message: 'bad request' }] });
+    const id = `LNK_TEST${boldLinks.size + 1}`;
+    boldLinks.set(id, { id, status: 'ACTIVE', total: amount.total_amount, reference, payment_methods });
+    res.json({ payload: { payment_link: id, url: `https://checkout.bold.co/${id}` }, errors: [] });
+  });
+  app.get('/bold/online/link/v1/:id', (req, res) => {
+    const l = boldLinks.get(req.params.id);
+    if (!l) return res.status(404).json({ payload: null, errors: [{ message: 'not found' }] });
+    res.json({ api_version: 1, id: l.id, total: l.total, status: l.status, reference: l.reference, is_sandbox: true });
+  });
+  app.locals.boldLinks = boldLinks;
+
   const auth = (req, res, next) => (req.headers.authorization === 'Bearer sk_test' ? next() : res.status(401).json({ success: false, error: 'Invalid token' }));
   app.use('/api', auth);
   app.get('/api/balance', (req, res) => res.json({ success: true, user_id: 1, balance }));
@@ -87,5 +104,5 @@ export function startMock(port = 4010) {
     res.status(202).json(o);
   });
   app.get('/api/games/orders', (req, res) => res.json({ success: true, orders: orders.filter((o) => o.kind === 'game' && (!req.query.order_id || o.external_order_id === req.query.order_id)) }));
-  return new Promise((r) => { const s = app.listen(port, () => r(s)); });
+  return new Promise((r) => { const s = app.listen(port, () => { s.boldLinks = boldLinks; r(s); }); });
 }

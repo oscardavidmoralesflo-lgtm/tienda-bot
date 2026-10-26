@@ -6,6 +6,8 @@ import { initDb } from './db.js';
 import { loadSettings } from './settings.js';
 import { loadOverrides } from './pricing.js';
 import { verifyWebhook } from './kokoro.js';
+import { verifyBoldSignature } from './bold.js';
+import { s as setting } from './settings.js';
 import { handleWebhook, pollOpenOrders } from './orders.js';
 import { createBot, setupCommands } from './bot/index.js';
 import { adminRouter } from './web/admin.js';
@@ -25,6 +27,7 @@ console.log(`✅ Base de datos: ${dbKind === 'local' ? 'local (./data)' : 'Postg
 const bot = createBot();
 await bot.init();
 console.log(`✅ Bot: @${bot.botInfo.username}`);
+const botUsername = bot.botInfo.username;
 await setupCommands(bot).catch((e) => console.error('setMyCommands', e.message));
 
 const app = express();
@@ -46,6 +49,30 @@ app.post('/kokoro/webhook', express.text({ type: '*/*', limit: '1mb' }), async (
   } catch (e) {
     console.error('webhook KOKORO', e.message);
   }
+});
+
+// Webhook de Bold (pagos en línea): firma HMAC en x-bold-signature. Responder 200 en menos de 2 s.
+app.post('/bold/webhook', express.text({ type: '*/*', limit: '1mb' }), async (req, res) => {
+  const raw = typeof req.body === 'string' ? req.body : '';
+  if (!verifyBoldSignature(raw, req.get('x-bold-signature'))) return res.status(401).json({ ok: false });
+  res.status(200).json({ ok: true });
+  try {
+    const r = await bot.handleBoldEvent(JSON.parse(raw));
+    console.log('Bold webhook', JSON.parse(raw).type, JSON.stringify(r));
+  } catch (e) {
+    console.error('Bold webhook', e.message);
+  }
+});
+
+// Página a la que vuelve el cliente después de pagar en Bold
+app.get('/pago/listo', (req, res) => {
+  const shop = String(setting('shop_name') || 'Nova Plus').replace(/[<>&"]/g, '');
+  const bot = `https://t.me/${botUsername}`;
+  res.send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${shop} · Pago</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0e14;color:#f3efe6;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
+.c{max-width:420px;text-align:center}.s{font-size:54px;color:#d6b266}h1{font-size:22px;margin:10px 0 6px}p{color:#b9b4a8;margin:0 0 22px}
+a{display:inline-block;background:linear-gradient(135deg,#efdcaa,#d4af62 48%,#a97f33);color:#15110a;font-weight:700;text-decoration:none;padding:13px 22px;border-radius:12px}</style></head>
+<body><div class="c"><div class="s">✦</div><h1>¡Gracias! / Thank you!</h1><p>Tu saldo se acredita automáticamente en segundos y te avisamos en Telegram.<br>Your balance is credited automatically in seconds and we will notify you on Telegram.</p><a href="${bot}">Volver a ${shop} · Back to ${shop}</a></div></body></html>`);
 });
 
 app.use('/admin', adminRouter(bot));
@@ -75,6 +102,9 @@ app.listen(config.port, async () => {
 // Precios y stock: carga inicial y refresco cada 3 minutos
 warmUp().catch((e) => console.error('warmUp', e.message));
 startRefresher();
+
+// Revisa los links de pago de Bold abiertos cada 2 minutos (respaldo del webhook)
+setInterval(() => bot.pollBold().catch((e) => console.error('Bold poll', e.message)), 120_000);
 
 // Revisa pedidos abiertos cada 45 s
 setInterval(() => pollOpenOrders().catch((e) => console.error('poll', e.message)), 45_000);
