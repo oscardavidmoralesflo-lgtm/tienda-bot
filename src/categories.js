@@ -1,17 +1,17 @@
 // Categorías de la tienda. Cada producto cae en la PRIMERA categoría cuyo patrón coincide con su nombre.
 // El orden importa (ej: "Coursera + Gemini" va a Educación antes que a IA).
 export const CATEGORIES = [
-  { key: 'api', icon: '🔌', label: 'APIs de IA', re: /\bapi\b/i },
-  { key: 'social', icon: '📈', label: 'Redes sociales', re: /likes|views|groups telegram|facebook|sms panel/i },
-  { key: 'mail', icon: '📧', label: 'Correos y cuentas', re: /hotmail|outlook|gmail|mail accounts|github accounts?\b(?! pro)|chatgpt free account/i },
-  { key: 'vpn', icon: '🔒', label: 'VPN y antivirus', re: /vpn|proton|mcafee|eset|antivirus|surfshark/i },
-  { key: 'edu', icon: '🎓', label: 'Educación', re: /duolingo|coursera|linkedin|udemy|quillbot|grammarly|jetbrain/i },
-  { key: 'stream', icon: '🎬', label: 'Streaming y música', re: /netflix|disney|prime video|amazon prime|max plan|crunchyroll|youtube|spotify|apple music|apple tv|tv360|hulu|discord|brain/i },
-  { key: 'design', icon: '🎨', label: 'Diseño y edición', re: /canva|capcut|adobe|figma|photoshop|corel|autodesk|alight|framer|descript|meitu|magic patterns|mobbin|miro/i },
-  { key: 'dev', icon: '💻', label: 'Desarrollo y no-code', re: /bolt|lovable|cursor|railway|posthog|n8n|warp|github/i },
-  { key: 'office', icon: '💼', label: 'Office y productividad', re: /office|microsoft|windows|notion|zoom|ilove ?pdf|readwise|granola|wispr|wisper/i },
-  { key: 'ai', icon: '🤖', label: 'Inteligencia Artificial', re: /chatgpt|gemini|claude|grok|perplexity|muse|manus|eleven|kling|heygen|leonardo|higgsfield|veo|pangram|brain\.fm|codex|deepseek/i },
-  { key: 'other', icon: '✨', label: 'Otros', re: /.*/ },
+  { key: 'api', icon: '🔌', label: 'APIs de IA', label_en: 'AI APIs', re: /\bapi\b/i },
+  { key: 'social', icon: '📈', label: 'Redes sociales', label_en: 'Social media', re: /likes|views|groups telegram|facebook|sms panel/i },
+  { key: 'mail', icon: '📧', label: 'Correos y cuentas', label_en: 'Emails & accounts', re: /hotmail|outlook|gmail|mail accounts|github accounts?\b(?! pro)|chatgpt free account/i },
+  { key: 'vpn', icon: '🔒', label: 'VPN y antivirus', label_en: 'VPN & antivirus', re: /vpn|proton|mcafee|eset|antivirus|surfshark/i },
+  { key: 'edu', icon: '🎓', label: 'Educación', label_en: 'Education', re: /duolingo|coursera|linkedin|udemy|quillbot|grammarly|jetbrain/i },
+  { key: 'stream', icon: '🎬', label: 'Streaming y música', label_en: 'Streaming & music', re: /netflix|disney|prime video|amazon prime|max plan|crunchyroll|youtube|spotify|apple music|apple tv|tv360|hulu|discord|brain/i },
+  { key: 'design', icon: '🎨', label: 'Diseño y edición', label_en: 'Design & editing', re: /canva|capcut|adobe|figma|photoshop|corel|autodesk|alight|framer|descript|meitu|magic patterns|mobbin|miro/i },
+  { key: 'dev', icon: '💻', label: 'Desarrollo y no-code', label_en: 'Dev & no-code', re: /bolt|lovable|cursor|railway|posthog|n8n|warp|github/i },
+  { key: 'office', icon: '💼', label: 'Office y productividad', label_en: 'Office & productivity', re: /office|microsoft|windows|notion|zoom|ilove ?pdf|readwise|granola|wispr|wisper/i },
+  { key: 'ai', icon: '🤖', label: 'Inteligencia Artificial', label_en: 'Artificial Intelligence', re: /chatgpt|gemini|claude|grok|perplexity|muse|manus|eleven|kling|heygen|leonardo|higgsfield|veo|pangram|brain\.fm|codex|deepseek/i },
+  { key: 'other', icon: '✨', label: 'Otros', label_en: 'Other', re: /.*/ },
 ];
 
 export const CAT_BY_KEY = Object.fromEntries(CATEGORIES.map((c) => [c.key, c]));
@@ -41,3 +41,6 @@ const ICONS = [
 export function iconOf(name) {
   return ICONS.find(([re]) => re.test(name))?.[1] || '🔹';
 }
+
+// Nombre de la categoría en el idioma del cliente
+export const catLabel = (cat, lang) => (lang === 'en' && cat.label_en ? cat.label_en : cat.label);

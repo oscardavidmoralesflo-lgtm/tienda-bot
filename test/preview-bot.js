@@ -30,7 +30,7 @@ const screens = [];
 let msgId = 100;
 const bot = createBot();
 bot.api.config.use(async (prev, method, payload) => {
-  if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Clavis', username: 'MiTiendaDigital2847_bot' } };
+  if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Nova Plus', username: 'MiTiendaDigital2847_bot' } };
   if (['sendMessage', 'editMessageText', 'sendPhoto'].includes(method)) {
     screens.push({ method, text: payload.text || payload.caption || '', kb: payload.reply_markup?.inline_keyboard || [] });
     return { ok: true, result: { message_id: ++msgId, date: 0, chat: { id: 7, type: 'private' }, text: payload.text } };
@@ -39,7 +39,7 @@ bot.api.config.use(async (prev, method, payload) => {
 });
 await bot.init();
 
-const from = { id: 7, is_bot: false, first_name: 'Laura', username: 'laura_co' };
+let from = { id: 7, is_bot: false, first_name: 'Laura', username: 'laura_co' };
 let uid = 1;
 const send = (text) => bot.handleUpdate({ update_id: uid++, message: { message_id: uid, date: 0, chat: { id: 7, type: 'private' }, from, text, ...(text.startsWith('/') ? { entities: [{ type: 'bot_command', offset: 0, length: text.split(' ')[0].length }] } : {}) } });
 const tap = (data) => bot.handleUpdate({ update_id: uid++, callback_query: { id: String(uid), from, chat_instance: '1', data, message: { message_id: 50, date: 0, chat: { id: 7, type: 'private' }, text: 'x' } } });
@@ -47,7 +47,8 @@ const label = (t) => screens.push({ label: t });
 
 await users.upsertUser(from);
 await users.credit(7, 12.5, 'recharge', 'demo');
-label('/start → menú principal'); await send('/start');
+label('/start → elegir idioma (primera vez)'); await send('/start');
+label('🇪🇸 Español → menú principal'); await tap('lang:es');
 label('🛍 Tienda'); await tap('st');
 label('🤖 Categoría IA'); await tap('c:ai:0');
 const firstProduct = screens.at(-1).kb[0][0].callback_data;
@@ -61,6 +62,18 @@ label('👤 Mi perfil'); await tap('pf');
 label('💰 Recargar saldo'); await tap('recharge');
 label('Elegir $20.000'); await tap('amc:20000');
 label('🎁 Invita y gana'); await tap('ref');
+// ---- cliente en inglés ----
+from = { id: 9, is_bot: false, first_name: 'John', username: 'john_us' };
+await users.upsertUser(from);
+await users.credit(9, 20, 'recharge', 'demo');
+label('EN · /start'); await send('/start');
+label('EN · 🇺🇸 English → main menu'); await tap('lang:en');
+label('EN · Store'); await tap('st');
+label('EN · AI category'); await tap('c:ai:0');
+const enProd = screens.at(-1).kb[0][0].callback_data;
+label('EN · Product'); await tap(enProd);
+label('EN · My profile'); await tap('pf');
+label('EN · Top up'); await tap('recharge');
 
 // --- HTML tipo Telegram ---
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -1,20 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- CLAVIS · símbolo: monograma "C" con cerradura en el espacio negativo -->
+  <!-- NOVA PLUS · símbolo: estrella nova de cuatro puntas que forma un "+" dentro de una órbita -->
   <defs>
     <linearGradient id="onyx" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#18202B"/>
       <stop offset="1" stop-color="#0A0E14"/>
     </linearGradient>
     <linearGradient id="gold" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#F1DFAE"/>
-      <stop offset="0.45" stop-color="#D4AF62"/>
+      <stop offset="0" stop-color="#F3E3B5"/>
+      <stop offset="0.45" stop-color="#D6B266"/>
       <stop offset="1" stop-color="#A97F33"/>
     </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#D6B266" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#D6B266" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="512" height="512" rx="0" fill="url(#onyx)"/>
   
-  <!-- C -->
-  <path d="M 368.6 161.5 A 148 148 0 1 0 368.6 350.5" fill="none" stroke="url(#gold)" stroke-width="54"/>
-  <!-- cerradura -->
-  <path d="M 256 194 A 38 38 0 0 1 276.5 264 L 286 330 Q 287 338 279 338 L 233 338 Q 225 338 226 330 L 235.5 264 A 38 38 0 0 1 256 194 Z" fill="url(#gold)"/>
+  <circle cx="256" cy="256" r="150" fill="url(#glow)"/>
+  <!-- órbita con un espacio arriba a la derecha -->
+  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#gold)" stroke-width="10" stroke-dasharray="842 100" transform="rotate(-27 256 256)"/>
+  <circle cx="362" cy="150" r="13" fill="url(#gold)"/>
+  <!-- estrella nova / "+" -->
+  <path d="M256 128 C 267 226 286 245 384 256 C 286 267 267 286 256 384 C 245 286 226 267 128 256 C 226 245 245 226 256 128 Z" fill="url(#gold)"/>
 </svg>

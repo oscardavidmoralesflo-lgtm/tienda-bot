@@ -2,7 +2,7 @@ import { many, query } from './db.js';
 
 // Valores por defecto. Todo se puede cambiar desde el panel de admin (Ajustes).
 export const DEFAULTS = {
-  shop_name: 'Clavis',
+  shop_name: 'Nova Plus',
   currency: 'USDT',
   markup_products: '20',   // % general (solo si no hay tramos)
   markup_games: '15',
@@ -18,6 +18,19 @@ export const DEFAULTS = {
   // Fidelización
   cashback_tiers: '10:1,50:2,200:3', // "Ñapa": total comprado (USD) → % que se devuelve en saldo (Plata 1 %, Oro 2 %, Diamante 3 %)
   renew_reminder_days: '3',    // días antes del vencimiento para recordar la renovación (0 = desactivado)
+  // Bono por recargas grandes (en pesos): "100000:3,200000:5" = +3 % desde $100.000, +5 % desde $200.000
+  recharge_bonus: '100000:3,200000:5',
+  // Textos en inglés (clientes que eligen English)
+  welcome_text_en:
+    '<b>{shop}</b> — Premium access\n' +
+    'Hi {name}, welcome.\n' +
+    'Premium AI, streaming and software, with instant delivery and warranty.',
+  payment_instructions_en:
+    '💳 <b>Payment methods</b> (no fees)\n\n' +
+    '• Bre-B (key): <code>@your_key</code>\n' +
+    '• Nequi: <code>300 000 0000</code>\n' +
+    '• Binance Pay ID: <code>000000000</code>\n\n' +
+    'After paying, send the receipt screenshot here.',
   referral_percent: '5',   // % de cada compra que gana quien invitó al cliente
   min_recharge: '1',
   low_balance_alert: '10', // te avisa cuando tu saldo en KOKORO baje de esto

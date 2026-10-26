@@ -3,6 +3,7 @@ import { s } from './settings.js';
 import { categoryOf } from './categories.js';
 
 const LEVELS = ['🥉 Bronce', '🥈 Plata', '🥇 Oro', '💎 Diamante', '👑 Leyenda'];
+const LEVELS_EN = ['🥉 Bronze', '🥈 Silver', '🥇 Gold', '💎 Diamond', '👑 Legend'];
 
 // "10:1,50:2,200:3" → [{ min: 10, pct: 1 }, …] (total comprado en USD → % de ñapa)
 export function cashbackTiers() {
@@ -15,15 +16,16 @@ export function cashbackTiers() {
 }
 
 // Nivel según lo comprado: nombre, % de ñapa y cuánto falta para el siguiente
-export function levelOf(totalUsd) {
+export function levelOf(totalUsd, lang = 'es') {
+  const names = lang === 'en' ? LEVELS_EN : LEVELS;
   const tiers = cashbackTiers();
   let idx = 0;
   tiers.forEach((t, i) => { if (totalUsd >= t.min) idx = i + 1; });
   const next = tiers[idx];
   return {
-    name: LEVELS[Math.min(idx, LEVELS.length - 1)],
+    name: names[Math.min(idx, names.length - 1)],
     pct: idx > 0 ? tiers[idx - 1].pct : 0,
-    next: next ? { name: LEVELS[Math.min(idx + 1, LEVELS.length - 1)], missing: next.min - totalUsd, pct: next.pct } : null,
+    next: next ? { name: names[Math.min(idx + 1, names.length - 1)], missing: next.min - totalUsd, pct: next.pct } : null,
   };
 }
 

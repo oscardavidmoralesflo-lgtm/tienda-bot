@@ -13,6 +13,8 @@ import { credit } from '../users.js';
 import { stats, refreshOrder, refundOrder, notifyDelivered, deliverManually } from '../orders.js';
 import { categoryOf, DISPLAY_ORDER, iconOf } from '../categories.js';
 import { esc, fmtDate, STATUS_ES } from '../util.js';
+import { t, userLang } from '../i18n.js';
+import { fmt } from '../pricing.js';
 import { page, loginPage, icon, avatar, salesChart, donut } from './layout.js';
 
 const COOKIE = 'adm';
@@ -298,7 +300,7 @@ export function adminRouter(bot) {
       return back(res, url, d ? 'Entregado y enviado al cliente' : 'No se pudo (¿ya estaba entregado o reembolsado?)');
     }
     if (req.params.action === 'refund') {
-      const r2 = await refundOrder(o.id, 'Reembolso manual del administrador');
+      const r2 = await refundOrder(o.id, t(await userLang(o.user_id), 'err_manual_refund'));
       return back(res, url, r2 ? 'Reembolsado al saldo del cliente' : 'Ya estaba reembolsado');
     }
     back(res, url, 'Acción desconocida');
@@ -329,10 +331,10 @@ export function adminRouter(bot) {
       one('SELECT count(*)::int AS n FROM users WHERE referred_by=$1', [u.id]),
       one("SELECT count(*)::int AS n, COALESCE(sum(price),0) AS t, COALESCE(sum(price-cost),0) AS p FROM orders WHERE user_id=$1 AND status='delivered'", [u.id]),
     ]);
-    const TX = { recharge: ['Recarga', 'b-ok'], purchase: ['Compra', 'b-info'], refund: ['Reembolso', 'b-warn'], adjust: ['Ajuste', 'b-muted'], referral: ['Comisión referido', 'b-brand'] };
+    const TX = { recharge: ['Recarga', 'b-ok'], purchase: ['Compra', 'b-info'], refund: ['Reembolso', 'b-warn'], adjust: ['Ajuste', 'b-muted'], referral: ['Comisión referido', 'b-brand'], cashback: ['Ñapa', 'b-brand'], bonus: ['Bono recarga', 'b-ok'] };
     const body = `<div class="card" style="margin-bottom:16px"><div class="split" style="flex-wrap:wrap">
         <div class="row" style="gap:14px">${avatar(u.first_name || u.username || u.id, u.id).replace('class="av"', 'class="av" style="width:52px;height:52px;border-radius:15px;font-size:18px;')}<div><div style="font-size:19px;font-weight:700">${esc(u.first_name || 'Sin nombre')}</div><div class="muted">${u.username ? '@' + esc(u.username) + ' · ' : ''}ID <span class="num">${u.id}</span>${u.referred_by ? ` · invitado por <a href="/admin/users/${u.referred_by}">${u.referred_by}</a>` : ''}</div></div></div>
-        <div class="row">${u.banned ? '<span class="badge b-bad">Bloqueado</span>' : '<span class="badge b-ok">Activo</span>'}<span class="badge b-muted">Cliente desde ${fmtDate(u.created_at).slice(0, 10)}</span></div></div></div>
+        <div class="row">${u.banned ? '<span class="badge b-bad">Bloqueado</span>' : '<span class="badge b-ok">Activo</span>'}<span class="badge b-muted">Cliente desde ${fmtDate(u.created_at).slice(0, 10)}</span><span class="badge b-info">${u.lang === 'en' ? '🇺🇸 English' : u.lang === 'es' ? '🇪🇸 Español' : 'Idioma sin elegir'}</span></div></div></div>
       <div class="grid g4">
         ${stat('Saldo', money(u.balance), { ic: 'wallet', color: 'brand', sub: cop(u.balance) ? '≈ ' + cop(u.balance) : '' })}
         ${stat('Compras', agg.n, { ic: 'bag', color: 'info', sub: `${money(agg.t)} ${cur()} en total` })}
@@ -362,9 +364,8 @@ export function adminRouter(bot) {
     try {
       const bal = await credit(id, amount, amount > 0 ? 'recharge' : 'adjust', req.body.note || 'Ajuste desde el panel');
       if (req.body.notify) {
-        await bot.notify.user(id, amount > 0
-          ? `💰 Se acreditaron <b>${money(amount)} ${cur()}</b> a tu saldo. Saldo actual: <b>${money(bal)}</b>`
-          : `ℹ️ Se ajustó tu saldo en ${money(amount)} ${cur()}. Saldo actual: <b>${money(bal)}</b>`);
+        const ul = await userLang(id);
+        await bot.notify.user(id, t(ul, amount > 0 ? 'credited' : 'adjusted', { amt: fmt(amount), bal: fmt(bal) }));
       }
       back(res, `/admin/users/${id}`, `Nuevo saldo: ${money(bal)} ${cur()}`);
     } catch (e) {
@@ -534,7 +535,8 @@ export function adminRouter(bot) {
       ['shop_name', 'Nombre de la tienda', 'text'],
       ['support_contact', 'Contacto de soporte', 'text', 'Ej: @tu_usuario'],
       ['channel_url', 'Canal de Telegram (opcional)', 'text', 'Ej: https://t.me/tu_canal — aparece como botón 📢 Canal en el menú.'],
-      ['welcome_text', 'Encabezado del menú principal', 'area', 'Usa {name} para el nombre del cliente y {shop} para el nombre de la tienda.'],
+      ['welcome_text', 'Encabezado del menú principal (español)', 'area', 'Usa {name} para el nombre del cliente y {shop} para el nombre de la tienda.'],
+      ['welcome_text_en', 'Encabezado del menú principal (inglés)', 'area', 'Lo ven los clientes que eligen English.'],
     ]],
     ['precios', 'trend', 'Precios y márgenes', 'Cómo se calcula tu ganancia', [
       ['price_tiers_products', 'Margen por tramos — productos', 'text', 'Formato COSTO_MÁX:%. Ej: 1:60,3:40,10:30,30:20,*:12 = hasta 1 USD ganas 60 %, hasta 3 USD 40 %… el resto 12 %. Vacío = margen general.'],
@@ -545,7 +547,9 @@ export function adminRouter(bot) {
       ['markup_games', 'Margen general juegos (%)', 'number', 'Solo se usa si dejas vacíos los tramos.'],
     ]],
     ['pagos', 'wallet', 'Pagos y moneda', 'Recargas y precios en pesos', [
-      ['payment_instructions', 'Instrucciones de pago', 'area', 'Tus métodos: llave Bre-B, Nequi, Binance… El cliente las ve al recargar.'],
+      ['payment_instructions', 'Instrucciones de pago (español)', 'area', 'Tus métodos: llave Bre-B, Nequi, Binance… El cliente las ve al recargar.'],
+      ['payment_instructions_en', 'Instrucciones de pago (inglés)', 'area'],
+      ['recharge_bonus', 'Bono por recarga grande (pesos:%)', 'text', 'Ej: 100000:3,200000:5 = +3 % de saldo extra desde $100.000 y +5 % desde $200.000. Anima a recargar más de una vez y reduce trabajo. Vacío = sin bono.'],
       ['cop_rate', 'Pesos colombianos por 1 USD', 'text', 'auto = tasa del día + margen (recomendado). También un número fijo (ej: 3300) o 0 para no mostrar COP.'],
       ['cop_spread', 'Margen sobre la tasa automática (%)', 'number', 'Cubre lo que te cuesta convertir pesos a USDT. Recomendado: 3.'],
       ['price_display', 'Mostrar precios en', 'text', 'cop = pesos redondos ($5.400) — recomendado para Colombia · usd = USDT'],

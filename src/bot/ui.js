@@ -1,4 +1,5 @@
 import { InlineKeyboard, Keyboard } from 'grammy';
+import { t } from '../i18n.js';
 
 // Botones fijos de abajo (atajos). La navegación completa va en botones dentro del mensaje.
 export const MENU = {
@@ -56,13 +57,13 @@ export function pager(kb, prefix, page, total, perPage) {
 }
 
 // Fila de navegación estándar: Atrás + Menú
-export function navRow(kb, back) {
+export function navRow(kb, back, lang = 'es') {
   kb.row();
-  if (back) kb.text('⬅️ Atrás', back);
-  kb.text('🏠 Menú', 'm');
+  if (back) kb.text(t(lang, 'btn_back'), back);
+  kb.text(t(lang, 'btn_menu'), 'm');
   return kb;
 }
 
 export const cut = (t, n = 48) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
-export const cancelKb = () => new InlineKeyboard().text('❌ Cancelar', 'x');
+export const cancelKb = (lang = 'es') => new InlineKeyboard().text(t(lang, 'btn_cancel'), 'x');
 export const stockIcon = (n) => (n > 20 ? '🟢' : n > 0 ? '🟡' : '🔴');

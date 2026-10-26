@@ -208,7 +208,7 @@ const JS = `
 
 // Logo de la marca (llave con argolla dorada) para la barra lateral y el login
 let logoSeq = 0;
-export const logoMark = (size = 38, k = ++logoSeq) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="cxo${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#18202B"/><stop offset="1" stop-color="#0A0E14"/></linearGradient><linearGradient id="cxg${k}" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#F1DFAE"/><stop offset=".45" stop-color="#D4AF62"/><stop offset="1" stop-color="#A97F33"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#cxo${k})"/><rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#D4AF62" stroke-opacity=".22" stroke-width="3"/><path d="M 368.6 161.5 A 148 148 0 1 0 368.6 350.5" fill="none" stroke="url(#cxg${k})" stroke-width="54"/><path d="M 256 194 A 38 38 0 0 1 276.5 264 L 286 330 Q 287 338 279 338 L 233 338 Q 225 338 226 330 L 235.5 264 A 38 38 0 0 1 256 194 Z" fill="url(#cxg${k})"/></svg>`;
+export const logoMark = (size = 38, k = ++logoSeq) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="nxo${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#18202B"/><stop offset="1" stop-color="#0A0E14"/></linearGradient><linearGradient id="nxg${k}" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#F3E3B5"/><stop offset=".45" stop-color="#D6B266"/><stop offset="1" stop-color="#A97F33"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#nxo${k})"/><rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#D6B266" stroke-opacity=".22" stroke-width="3"/><circle cx="256" cy="256" r="150" fill="none" stroke="url(#nxg${k})" stroke-width="12" stroke-dasharray="842 100" transform="rotate(-27 256 256)"/><circle cx="362" cy="150" r="15" fill="url(#nxg${k})"/><path d="M256 128 C 267 226 286 245 384 256 C 286 267 267 286 256 384 C 245 286 226 267 128 256 C 226 245 245 226 256 128 Z" fill="url(#nxg${k})"/></svg>`;
 
 const AV_COLORS = ['#a97f33', '#2f6f8f', '#7a5c3e', '#3b4a6b', '#8a6d2f', '#4b6358', '#6b4e71', '#5c6b7a'];
 export function avatar(name, id) {
@@ -244,7 +244,7 @@ export function page(title, body, opts = {}) {
   return shell(title, head + body, opts);
 }
 
-export function loginPage(error = '', shop = 'Clavis') {
+export function loginPage(error = '', shop = 'Nova Plus') {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Entrar · ${esc(shop)}</title>${FONT}<style>${CSS}
 .login{min-height:100vh;display:grid;place-items:center;padding:20px;position:relative;z-index:1}

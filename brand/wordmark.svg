@@ -1,18 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400">
-  <!-- CLAVIS · logotipo horizontal (símbolo + nombre) -->
+  <!-- NOVA PLUS · logotipo horizontal -->
   <defs>
     <linearGradient id="gold" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#F1DFAE"/>
-      <stop offset="0.45" stop-color="#D4AF62"/>
+      <stop offset="0" stop-color="#F3E3B5"/>
+      <stop offset="0.45" stop-color="#D6B266"/>
       <stop offset="1" stop-color="#A97F33"/>
     </linearGradient>
   </defs>
   <rect width="1200" height="400" fill="#0B0F15"/>
-  <g transform="translate(70 70) scale(0.5078)">
-    <path d="M 368.6 161.5 A 148 148 0 1 0 368.6 350.5" fill="none" stroke="url(#gold)" stroke-width="54"/>
-    <path d="M 256 194 A 38 38 0 0 1 276.5 264 L 286 330 Q 287 338 279 338 L 233 338 Q 225 338 226 330 L 235.5 264 A 38 38 0 0 1 256 194 Z" fill="url(#gold)"/>
+  <g transform="translate(64 64) scale(0.53)">
+    <circle cx="256" cy="256" r="150" fill="none" stroke="url(#gold)" stroke-width="10" stroke-dasharray="842 100" transform="rotate(-27 256 256)"/>
+    <circle cx="362" cy="150" r="13" fill="url(#gold)"/>
+    <path d="M256 128 C 267 226 286 245 384 256 C 286 267 267 286 256 384 C 245 286 226 267 128 256 C 226 245 245 226 256 128 Z" fill="url(#gold)"/>
   </g>
-  <text x="400" y="222" font-family="Segoe UI, Montserrat, Arial, sans-serif" font-weight="600" font-size="128" letter-spacing="30" fill="#F5F1E8">CLAVIS</text>
-  <rect x="404" y="252" width="56" height="3" fill="url(#gold)"/>
-  <text x="476" y="262" font-family="Segoe UI, Montserrat, Arial, sans-serif" font-weight="500" font-size="26" letter-spacing="9" fill="#D4AF62">ACCESO PREMIUM</text>
+  <text x="390" y="222" font-family="Segoe UI, Montserrat, Arial, sans-serif" font-size="104" letter-spacing="18"><tspan font-weight="600" fill="#F5F1E8">NOVA</tspan><tspan font-weight="300" fill="url(#gold)" dx="26">PLUS</tspan></text>
+  <rect x="394" y="252" width="56" height="3" fill="url(#gold)"/>
+  <text x="466" y="262" font-family="Segoe UI, Montserrat, Arial, sans-serif" font-weight="500" font-size="26" letter-spacing="9" fill="#D6B266">ACCESO PREMIUM</text>
 </svg>

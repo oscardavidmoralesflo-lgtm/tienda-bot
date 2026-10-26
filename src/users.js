@@ -57,3 +57,7 @@ export async function referralStats(userId) {
   );
   return { invited: Number(r.invited), earned: Number(r.earned) };
 }
+
+export async function setLang(userId, lang) {
+  await query('UPDATE users SET lang = $2 WHERE id = $1', [userId, lang === 'en' ? 'en' : 'es']);
+}

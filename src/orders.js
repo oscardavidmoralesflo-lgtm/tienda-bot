@@ -7,7 +7,8 @@ import { bunny, BunnyError, balanceOf } from './bunny.js';
 import { credit, getUser } from './users.js';
 import { num, s } from './settings.js';
 import { money, round2, round4, fmt } from './pricing.js';
-import { esc, errorEs } from './util.js';
+import { esc } from './util.js';
+import { t, errorText, localName, userLang } from './i18n.js';
 import { levelOf, durationDays } from './loyalty.js';
 
 let notifier = { user: async () => {}, admins: async () => {} };
@@ -50,10 +51,10 @@ export async function refundOrder(orderId, reason) {
   );
   if (!o) return null;
   const bal = await credit(o.user_id, Number(o.price), 'refund', `Reembolso pedido #${o.id}`, o.id);
-  await notifier.user(o.user_id,
-    `↩️ <b>Pedido #${o.id} reembolsado</b>\n${esc(o.product_name)}\n` +
-    (reason ? `Motivo: ${esc(reason)}\n` : '') +
-    `Se devolvieron <b>${fmt(o.price)}</b> a tu saldo. Saldo actual: <b>${fmt(bal)}</b>`);
+  const lang = await userLang(o.user_id);
+  await notifier.user(o.user_id, t(lang, 'n_refund', {
+    id: o.id, name: esc(localName(o.product_name, lang)), reason: reason ? t(lang, 'n_reason', { r: esc(reason) }) : '', amt: fmt(o.price), bal: fmt(bal),
+  }));
   return o;
 }
 
@@ -67,7 +68,7 @@ async function payReferral(o) {
   const amount = round2((Number(o.price) * pct) / 100);
   if (amount <= 0) return;
   await credit(u.referred_by, amount, 'referral', `Comisión por compra de ${u.first_name || u.id}`, o.id);
-  await notifier.user(u.referred_by, `🎁 Ganaste <b>${fmt(amount)}</b> por la compra de un referido.`);
+  await notifier.user(u.referred_by, t(await userLang(u.referred_by), 'n_referral', { amt: fmt(amount) }));
 }
 
 async function checkLowBalance(remaining) {
@@ -99,14 +100,15 @@ async function markDelivered(o, delivery, kokoroOrderId) {
 // "Ñapa": devuelve un % de la compra en saldo según el nivel del cliente
 async function payCashback(o) {
   const r = await one("SELECT COALESCE(sum(price),0) AS t FROM orders WHERE user_id=$1 AND status='delivered'", [o.user_id]);
-  const lvl = levelOf(Number(r.t));
+  const lang = await userLang(o.user_id);
+  const lvl = levelOf(Number(r.t), lang);
   if (!(lvl.pct > 0)) return;
   const marked = await one('UPDATE orders SET cashback_paid = TRUE WHERE id=$1 AND cashback_paid = FALSE RETURNING id', [o.id]);
   if (!marked) return;
   const amount = round4((Number(o.price) * lvl.pct) / 100);
   if (amount <= 0) return;
   await credit(o.user_id, amount, 'cashback', `Ñapa ${lvl.pct}% pedido #${o.id}`, o.id);
-  await notifier.user(o.user_id, `🎁 <b>¡Tu ñapa!</b> Te devolvimos <b>${fmt(amount)}</b> (${lvl.pct}%) por ser cliente ${lvl.name}. Ya está en tu saldo.`);
+  await notifier.user(o.user_id, t(lang, 'n_cashback', { amt: fmt(amount), pct: lvl.pct, lvl: lvl.name }));
 }
 
 // Programa el recordatorio de renovación (ej: Netflix 1 mes → aviso 3 días antes de vencer)
@@ -125,9 +127,9 @@ export async function sendRenewals() {
   for (const o of due) {
     const mark = await one('UPDATE orders SET reminded = TRUE WHERE id=$1 AND reminded = FALSE RETURNING id', [o.id]);
     if (!mark) continue;
-    await notifier.user(o.user_id,
-      `⏰ <b>Tu ${esc(o.product_name)} vence en ${num('renew_reminder_days')} días</b>\n\nRenuévalo ahora en un toque y sigue sin interrupciones. 🔑`,
-      { reply_markup: { inline_keyboard: [[{ text: '🔁 Renovar ahora', callback_data: `rn:${o.id}` }], [{ text: '🛍 Ver tienda', callback_data: 'st' }]] } });
+    const lang = await userLang(o.user_id);
+    await notifier.user(o.user_id, t(lang, 'n_renew', { name: esc(localName(o.product_name, lang)), d: num('renew_reminder_days') }),
+      { reply_markup: { inline_keyboard: [[{ text: t(lang, 'btn_renew'), callback_data: `rn:${o.id}` }], [{ text: t(lang, 'btn_view_store'), callback_data: 'st' }]] } });
   }
   return due.length;
 }
@@ -174,10 +176,11 @@ async function buyFromBunny(o, product, quantity, unitPrice) {
     if (e instanceof BunnyError && e.definitelyNotCharged) {
       if (/balance|insufficient|fund|saldo/i.test(e.message)) {
         await notifier.admins(`🚨 <b>Venta perdida por saldo insuficiente en Bunny</b>\nPedido #${o.id}: ${esc(o.product_name)} (costo ${money(o.cost)} USDT). Recarga en @bunnytoolss_bot → Deposit.`);
-        await refundOrder(o.id, FRIENDLY[402]);
-        return { ok: false, reason: 'api', message: FRIENDLY[402], order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
+        const msg = t(await userLang(o.user_id), 'err_unavailable');
+        await refundOrder(o.id, msg);
+        return { ok: false, reason: 'api', message: msg, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
       }
-      const reason = /stock/i.test(e.message) ? 'Sin stock en este momento.' : e.message;
+      const reason = /stock/i.test(e.message) ? t(await userLang(o.user_id), 'err_out_of_stock') : e.message;
       await refundOrder(o.id, reason);
       return { ok: false, reason: 'api', message: reason, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
     }
@@ -258,7 +261,7 @@ export async function sendConfirmationCode(order, code) {
 async function applyGameOrder(o, k, { silent = false } = {}) {
   if (k.remaining_balance != null) await checkLowBalance(k.remaining_balance);
   if (k.status === 'refunded') {
-    await refundOrder(o.id, k.failure_reason || k.error || 'El proveedor rechazó el pedido');
+    await refundOrder(o.id, k.failure_reason || k.error || t(await userLang(o.user_id), 'err_provider_rejected'));
     return one('SELECT * FROM orders WHERE id=$1', [o.id]);
   }
   if (k.status === 'delivered') {
@@ -288,15 +291,14 @@ export async function askForCode(o) {
   const ar = typeof o.action_required === 'string' ? JSON.parse(o.action_required) : o.action_required;
   const { setState } = await import('./users.js');
   await setState(o.user_id, { step: 'supercell_code', orderId: o.id });
-  const until = ar?.expires_at ? new Date(ar.expires_at).toISOString().slice(11, 16) + ' UTC' : '30 minutos';
-  await notifier.user(o.user_id,
-    `📧 <b>Pedido #${o.id}: falta un paso</b>\n\nSupercell envió un <b>código de confirmación</b> al correo de tu cuenta.\n` +
-    `Escríbelo aquí en el chat (tienes hasta las ${until}). Si no llega a tiempo, el pedido se reembolsa automáticamente.`);
+  const lang = await userLang(o.user_id);
+  const until = ar?.expires_at ? new Date(ar.expires_at).toISOString().slice(11, 16) + ' UTC' : t(lang, 'n_30min');
+  await notifier.user(o.user_id, t(lang, 'n_code', { id: o.id, until }));
 }
 
 export async function notifyDelivered(o) {
-  await notifier.user(o.user_id,
-    `✅ <b>Pedido #${o.id} entregado</b>\n${esc(o.product_name)}\n\n${formatDelivery(o)}`);
+  const lang = await userLang(o.user_id);
+  await notifier.user(o.user_id, t(lang, 'n_delivered', { id: o.id, name: esc(localName(o.product_name, lang)), delivery: formatDelivery(o) }));
 }
 
 async function callWithRetry(fn) {
@@ -324,7 +326,8 @@ async function handlePurchaseError(o, e) {
     if (e.status === 402) {
       await notifier.admins(`🚨 <b>Venta perdida por saldo insuficiente en KOKORO</b>\nPedido #${o.id}: ${esc(o.product_name)} (costo ${money(o.cost)} USDT).\nTu saldo: ${money(e.body.balance)} USDT. Recarga en @Shop_KOKORO_BOT.`);
     }
-    const reason = e.status === 402 ? FRIENDLY[402] : errorEs(e);
+    const lang = await userLang(o.user_id);
+    const reason = e.status === 402 ? t(lang, 'err_unavailable') : errorText(e, lang);
     await refundOrder(o.id, reason);
     return { ok: false, reason: 'api', message: reason, order: await one('SELECT * FROM orders WHERE id=$1', [o.id]) };
   }
@@ -356,7 +359,7 @@ export async function refreshOrder(o) {
       }
     }
     if (k.status === 'refunded' || k.status === 'cancelled') {
-      await refundOrder(o.id, 'El proveedor canceló el pedido');
+      await refundOrder(o.id, t(await userLang(o.user_id), 'err_provider_cancelled'));
     }
     return one('SELECT * FROM orders WHERE id=$1', [o.id]);
   } catch (e) {
@@ -368,7 +371,7 @@ export async function refreshOrder(o) {
 // Si KOKORO no tiene el pedido después de 10 minutos, nunca se cobró: reembolsamos.
 async function maybeRefundMissing(o) {
   if (Date.now() - new Date(o.created_at).getTime() > 10 * 60_000) {
-    await refundOrder(o.id, 'El pedido no llegó al proveedor');
+    await refundOrder(o.id, t(await userLang(o.user_id), 'err_no_charge_provider'));
   }
   return one('SELECT * FROM orders WHERE id=$1', [o.id]);
 }

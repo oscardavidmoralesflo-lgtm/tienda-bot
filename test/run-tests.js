@@ -258,6 +258,38 @@ await test('ñapa por nivel y recordatorio de renovación', async () => {
   assert.ok(sent.some(([to, t]) => to === 777 && t.includes('vence en')));
 });
 
+await test('bilingüe: mismas claves, textos usados existen y avisos en inglés', async () => {
+  const fs = await import('node:fs');
+  const { DICT, t, localName } = await import('../src/i18n.js');
+  const es = Object.keys(DICT.es).sort();
+  const en = Object.keys(DICT.en).sort();
+  assert.deepEqual(en, es);
+  // toda clave fija usada en el código existe en el diccionario
+  const code = ['src/bot/index.js', 'src/bot/shop.js', 'src/orders.js', 'src/bot/ui.js', 'src/web/admin.js']
+    .map((f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')).join('\n');
+  const used = [...code.matchAll(/\bt\((?:ctx\.lang|lang|ul|rl|'es'|'en'|await userLang\([^)]*\)), '([a-z_0-9]+)'/g), ...code.matchAll(/\bT\(ctx, '([a-z_0-9]+)'/g)].map((m) => m[1]);
+  const missing = [...new Set(used)].filter((k) => !(k in DICT.es));
+  assert.deepEqual(missing, []);
+  assert.equal(t('en', 'p_price', { p: '$5.400 COP' }), '💵 Price: <b>$5.400 COP</b>');
+  assert.equal(localName('Gemini AI PRO 18 Meses', 'en'), 'Gemini AI PRO 18 Months');
+  // un cliente en inglés recibe sus avisos en inglés
+  const { query: q } = await import('../src/db.js');
+  await users.upsertUser({ id: 888, first_name: 'John' });
+  await q("UPDATE users SET lang='en' WHERE id=888");
+  await users.credit(888, 50, 'recharge', 'test');
+  const p = (await kokoro.products()).find((x) => x.id === 'netflix_1m');
+  await orders.buyProduct({ userId: 888, product: { ...p, name: 'Netflix 1 Mes', _unitCost: 3 }, quantity: 1, unitPrice: 12 });
+  assert.ok(sent.some(([to, m]) => to === 888 && m.includes('Your cashback')));
+});
+
+await test('bono por recarga grande', async () => {
+  const { rechargeBonusPct } = await import('../src/bot/index.js');
+  await saveSettings({ recharge_bonus: '100000:3,200000:5' });
+  assert.equal(rechargeBonusPct(50000), 0);
+  assert.equal(rechargeBonusPct(100000), 3);
+  assert.equal(rechargeBonusPct(250000), 5);
+});
+
 console.log(`\n${pass} pruebas OK`);
 mock.close();
 process.exit(0);

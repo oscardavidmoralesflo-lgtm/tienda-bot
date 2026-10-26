@@ -84,3 +84,6 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashback_paid BOOLEAN NOT NULL DEFAU
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS renew_at TIMESTAMPTZ;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reminded BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS orders_renew_idx ON orders (renew_at) WHERE reminded = FALSE;
+
+-- Idioma elegido por el cliente (es / en). NULL = aún no lo eligió
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT;
