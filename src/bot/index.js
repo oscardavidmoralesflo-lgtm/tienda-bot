@@ -3,11 +3,12 @@ import { config, isAdmin } from '../config.js';
 import { one, many, query } from '../db.js';
 import { kokoro } from '../kokoro.js';
 import { s, num } from '../settings.js';
-import { money, cop, copSuffix, productUnitPrice } from '../pricing.js';
+import { money, cop, copSuffix, productUnitPrice, fmt, fmtS, copMode, copRate, round4 } from '../pricing.js';
 import { upsertUser, getUser, setState, credit, userOrders, referralStats } from '../users.js';
 import { setNotifier, refreshOrder, formatDelivery, stats } from '../orders.js';
 import { esc, fmtDate, STATUS_ES } from '../util.js';
 import { iconOf } from '../categories.js';
+import { levelOf } from '../loyalty.js';
 import { MENU, LEGACY, LINE, show, cancelKb, navRow, cut } from './ui.js';
 import { registerShop, handleShopText, showStore, showGames, bestSellers, doSearch } from './shop.js';
 
@@ -66,10 +67,10 @@ export function createBot() {
     let text = `${greeting}\n${LINE}\n`;
     if (top.length) {
       text += '🔥 <b>Más vendidos</b>\n';
-      text += top.map((p, i) => `${['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]} ${esc(cut(p.name, 38))} — <b>$${money(productUnitPrice(p))}</b>`).join('\n');
+      text += top.map((p, i) => `${['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i]} ${esc(cut(p.name, 38))} — <b>${fmtS(productUnitPrice(p))}</b>`).join('\n');
       text += `\n${LINE}\n`;
     }
-    text += `💰 Tu saldo: <b>${money(u.balance)} ${cur()}</b>${copSuffix(u.balance)}\n🆔 Tu ID: <code>${u.id}</code>`;
+    text += `💰 Tu saldo: <b>${fmt(u.balance)}</b>\n🆔 Tu ID: <code>${u.id}</code>`;
     const kb = new InlineKeyboard()
       .text('🛍 Tienda', 'st').text('🎮 Juegos y Gift Cards', 'g:topup:0').row()
       .text('🔥 Más vendidos', 'top').text('🔎 Buscar', 'gs').row()
@@ -105,15 +106,17 @@ export function createBot() {
     const u = await getUser(ctx.from.id);
     const o = await one("SELECT count(*)::int AS n, COALESCE(sum(price),0) AS t FROM orders WHERE user_id=$1 AND status='delivered'", [u.id]);
     const r = await referralStats(u.id);
-    const level = o.t >= 200 ? '💎 Diamante' : o.t >= 50 ? '🥇 Oro' : o.t >= 10 ? '🥈 Plata' : '🥉 Bronce';
+    const lvl = levelOf(Number(o.t));
+    const level = `${lvl.name}${lvl.pct ? ` · 🎁 Ñapa ${lvl.pct}% en cada compra` : ''}`;
+    const nextLine = lvl.next ? `\n🚀 Te faltan <b>${fmt(lvl.next.missing)}</b> en compras para ${lvl.next.name} (ñapa ${lvl.next.pct}%)` : '';
     const text =
       `👤 <b>Mi perfil</b>\n${LINE}\n` +
       `🙋 ${esc(u.first_name || '')}${u.username ? ` (@${esc(u.username)})` : ''}\n` +
       `🆔 ID: <code>${u.id}</code>\n` +
-      `🏅 Nivel: ${level}\n${LINE}\n` +
-      `💰 Saldo: <b>${money(u.balance)} ${cur()}</b>${copSuffix(u.balance)}\n` +
-      `🛒 Compras: ${o.n} · Total: ${money(o.t)} ${cur()}\n` +
-      `👥 Invitados: ${r.invited} · Ganado: ${money(r.earned)} ${cur()}\n` +
+      `🏅 Nivel: ${level}${nextLine}\n${LINE}\n` +
+      `💰 Saldo: <b>${fmt(u.balance)}</b>\n` +
+      `🛒 Compras: ${o.n} · Total: ${fmt(o.t)}\n` +
+      `👥 Invitados: ${r.invited} · Ganado: ${fmt(r.earned)}\n` +
       `📅 Cliente desde: ${fmtDate(u.created_at).slice(0, 10)}`;
     const kb = new InlineKeyboard()
       .text('💰 Recargar saldo', 'recharge').text('📦 Mis pedidos', 'ol').row()
@@ -125,42 +128,72 @@ export function createBot() {
 
   bot.callbackQuery('tx', async (ctx) => {
     const tx = await many('SELECT * FROM transactions WHERE user_id=$1 ORDER BY id DESC LIMIT 12', [ctx.from.id]);
-    const names = { recharge: 'Recarga', purchase: 'Compra', refund: 'Reembolso', adjust: 'Ajuste', referral: 'Comisión referido' };
+    const names = { recharge: 'Recarga', purchase: 'Compra', refund: 'Reembolso', adjust: 'Ajuste', referral: 'Comisión referido', cashback: '🎁 Ñapa' };
     let text = `📜 <b>Movimientos</b>\n${LINE}\n`;
     text += tx.length
-      ? tx.map((t) => `${t.amount >= 0 ? '🟢 +' : '🔴 '}${money(t.amount)} · ${names[t.type] || t.type}${t.note && t.type === 'purchase' ? ` · ${esc(cut(t.note, 28))}` : ''}\n<i>${fmtDate(t.created_at)}</i>`).join('\n')
+      ? tx.map((t) => `${t.amount >= 0 ? '🟢 +' : '🔴 −'}${fmt(Math.abs(t.amount))} · ${names[t.type] || t.type}${t.note && t.type === 'purchase' ? ` · ${esc(cut(t.note, 28))}` : ''}\n<i>${fmtDate(t.created_at)}</i>`).join('\n')
       : 'Aún no tienes movimientos.';
     await show(ctx, text, navRow(new InlineKeyboard(), 'pf'));
   });
 
   // ---------- recargas ----------
+  // En modo pesos el cliente elige/escribe pesos; el saldo se guarda en USD con la tasa del momento.
+  const minCop = () => Math.ceil((num('min_recharge') * copRate()) / 1000) * 1000;
   const startRecharge = async (ctx) => {
     await setState(ctx.from.id, { step: 'recharge_amount' });
-    const min = num('min_recharge');
+    const qr = s('payment_qr');
+    if (qr) ctx.replyWithPhoto(qr, { caption: '📲 Escanea este QR desde la app de tu banco o Nequi (Bre-B)' }).catch(() => {});
     let text = `💰 <b>Recargar saldo</b>\n${LINE}\n${s('payment_instructions')}\n${LINE}\n`;
-    if (cop(1)) text += `💱 Tasa: 1 ${cur()} = <b>${cop(1)}</b>\n`;
-    text += `✍️ Elige un monto o escribe otro (mínimo ${money(min)} ${cur()}):`;
     const kb = new InlineKeyboard();
-    const amounts = [5, 10, 20, 50].filter((a) => a >= min);
-    amounts.forEach((a, i) => {
-      kb.text(`${a} ${cur()}${cop(a) ? ` · ${cop(a).replace(' COP', '')}` : ''}`, `amt:${a}`);
-      if (i % 2 === 1) kb.row();
-    });
+    if (copMode()) {
+      text += `✍️ Elige cuánto recargar o escribe otro monto en pesos (mínimo <b>$${minCop().toLocaleString('es-CO')}</b>):`;
+      [10000, 20000, 50000, 100000].filter((a) => a >= minCop()).forEach((a, i) => {
+        kb.text(`$${a.toLocaleString('es-CO')}`, `amc:${a}`);
+        if (i % 2 === 1) kb.row();
+      });
+    } else {
+      const min = num('min_recharge');
+      if (cop(1)) text += `💱 Tasa: 1 ${cur()} = <b>${cop(1)}</b>\n`;
+      text += `✍️ Elige un monto o escribe otro (mínimo ${fmt(min)}):`;
+      [5, 10, 20, 50].filter((a) => a >= min).forEach((a, i) => {
+        kb.text(`${a} ${cur()}`, `amt:${a}`);
+        if (i % 2 === 1) kb.row();
+      });
+    }
     kb.row().text('❌ Cancelar', 'x');
     await show(ctx, text, kb);
   };
   bot.command('recargar', startRecharge);
   bot.callbackQuery('recharge', startRecharge);
 
-  const askProof = async (ctx, amount) => {
-    await setState(ctx.from.id, { step: 'recharge_proof', amount });
+  // amount = USD que se acreditan; pesos = lo que el cliente paga (en modo pesos)
+  const askProof = async (ctx, amount, pesos = null) => {
+    await setState(ctx.from.id, { step: 'recharge_proof', amount, cop: pesos });
     const text =
-      `🧾 <b>Recarga de ${money(amount)} ${cur()}</b>\n${LINE}\n` +
-      (cop(amount) ? `💵 Debes pagar: <b>${cop(amount)}</b>\n` : '') +
+      `🧾 <b>Recarga de ${pesos ? '$' + pesos.toLocaleString('es-CO') + ' COP' : fmt(amount)}</b>\n${LINE}\n` +
+      (!pesos && cop(amount) ? `💵 Debes pagar: <b>${cop(amount)}</b>\n` : '') +
       `1️⃣ Paga con uno de los métodos de arriba\n2️⃣ Envía aquí la <b>captura o foto del comprobante</b> 📸\n\nTe avisamos apenas se acredite ✅`;
     await show(ctx, text, cancelKb());
   };
   bot.callbackQuery(/^amt:(\d+)$/, (ctx) => askProof(ctx, Number(ctx.match[1])));
+  bot.callbackQuery(/^amc:(\d+)$/, (ctx) => {
+    const pesos = Number(ctx.match[1]);
+    return askProof(ctx, round4(pesos / copRate()), pesos);
+  });
+
+  // El admin configura el QR de cobro enviándole al bot la foto con el texto /qr
+  bot.on('message:photo', async (ctx, next) => {
+    if (!isAdmin(ctx.from.id) || !String(ctx.message.caption || '').toLowerCase().startsWith('/qr')) return next();
+    const { saveSettings } = await import('../settings.js');
+    await saveSettings({ payment_qr: ctx.message.photo.at(-1).file_id });
+    await ctx.reply('✅ QR de cobro guardado. Los clientes lo verán al recargar. (Para quitarlo: /qr_borrar)');
+  });
+  bot.command('qr_borrar', async (ctx) => {
+    if (!isAdmin(ctx.from.id)) return;
+    const { saveSettings } = await import('../settings.js');
+    await saveSettings({ payment_qr: '' });
+    await ctx.reply('🗑 QR de cobro eliminado.');
+  });
 
   bot.on(['message:photo', 'message:document'], async (ctx, next) => {
     const st = ctx.dbUser.state;
@@ -168,15 +201,16 @@ export function createBot() {
     const photo = ctx.message.photo?.at(-1);
     const fileId = photo ? photo.file_id : ctx.message.document.file_id;
     const type = photo ? 'photo' : 'document';
-    const r = await one('INSERT INTO recharges (user_id, amount, proof_file_id, proof_type) VALUES ($1,$2,$3,$4) RETURNING *', [
-      ctx.from.id, st.amount, fileId, type,
+    const r = await one('INSERT INTO recharges (user_id, amount, amount_cop, proof_file_id, proof_type) VALUES ($1,$2,$3,$4,$5) RETURNING *', [
+      ctx.from.id, st.amount, st.cop || null, fileId, type,
     ]);
     await setState(ctx.from.id, null);
+    const paid = st.cop ? `$${Number(st.cop).toLocaleString('es-CO')} COP` : fmt(st.amount);
     await ctx.reply(
-      `📨 <b>¡Comprobante recibido!</b>\n${LINE}\nSolicitud #${r.id} por ${money(st.amount)} ${cur()}${copSuffix(st.amount)}\n⏱ La revisamos en pocos minutos y te avisamos aquí.`,
+      `📨 <b>¡Comprobante recibido!</b>\n${LINE}\nSolicitud #${r.id} por ${paid}\n⏱ La revisamos en pocos minutos y te avisamos aquí.`,
       { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text('🛍 Ver tienda', 'st').text('🏠 Menú', 'm') },
     );
-    const caption = `💵 <b>Recarga #${r.id}</b>\nCliente: ${esc(ctx.from.first_name || '')} ${ctx.from.username ? '@' + esc(ctx.from.username) : ''} (<code>${ctx.from.id}</code>)\nMonto: <b>${money(st.amount)} ${cur()}</b>${copSuffix(st.amount)}`;
+    const caption = `💵 <b>Recarga #${r.id}</b>\nCliente: ${esc(ctx.from.first_name || '')} ${ctx.from.username ? '@' + esc(ctx.from.username) : ''} (<code>${ctx.from.id}</code>)\nPagó: <b>${paid}</b>\nSe acreditan: <b>${money(st.amount)} USDT</b>`;
     const kb = new InlineKeyboard().text('✅ Aprobar', `ra:${r.id}`).text('❌ Rechazar', `rr:${r.id}`);
     for (const id of config.adminIds) {
       try {
@@ -196,7 +230,7 @@ export function createBot() {
       kb.text('🛍 Ir a la tienda', 'st');
       return show(ctx, `📦 <b>Mis pedidos</b>\n${LINE}\nAún no tienes pedidos. ¡Tu primera compra te espera! 🛍`, navRow(kb));
     }
-    for (const o of orders) kb.text(`${STATUS_ES[o.status]?.split(' ')[0] || ''} #${o.id} · ${cut(o.product_name, 28)} · $${money(o.price)}`, `o:${o.id}`).row();
+    for (const o of orders) kb.text(`${STATUS_ES[o.status]?.split(' ')[0] || ''} #${o.id} · ${cut(o.product_name, 28)} · ${fmtS(o.price)}`, `o:${o.id}`).row();
     await show(ctx, `📦 <b>Mis pedidos</b>\n${LINE}\nTus últimos ${orders.length} pedidos. Toca uno para ver los datos de acceso:`, navRow(kb, 'pf'));
   };
   bot.command('pedidos', showOrders);
@@ -205,7 +239,7 @@ export function createBot() {
     let o = await one('SELECT * FROM orders WHERE id=$1 AND user_id=$2', [Number(ctx.match[1]), ctx.from.id]);
     if (!o) return;
     if (['pending', 'processing', 'action_required'].includes(o.status)) o = await refreshOrder(o);
-    let text = `🧾 <b>Pedido #${o.id}</b>\n${LINE}\n${iconOf(o.product_name)} ${esc(o.product_name)}\n🔢 Cantidad: ${o.quantity}\n💳 Total: ${money(o.price)} ${cur()}\n📍 Estado: ${STATUS_ES[o.status] || o.status}\n📅 ${fmtDate(o.created_at)} UTC`;
+    let text = `🧾 <b>Pedido #${o.id}</b>\n${LINE}\n${iconOf(o.product_name)} ${esc(o.product_name)}\n🔢 Cantidad: ${o.quantity}\n💳 Total: ${fmt(o.price)}\n📍 Estado: ${STATUS_ES[o.status] || o.status}\n📅 ${fmtDate(o.created_at)} UTC`;
     if (o.status === 'delivered') text += `\n${LINE}\n${formatDelivery(o)}`;
     if (o.failure_reason && o.status === 'refunded') text += `\n↩️ Motivo: ${esc(o.failure_reason)}`;
     if (o.status === 'action_required') text += '\n\n📧 Escribe aquí el código de confirmación que Supercell envió a tu correo.';
@@ -224,7 +258,7 @@ export function createBot() {
       `🎁 <b>Invita y gana</b>\n${LINE}\n` +
       `Gana el <b>${num('referral_percent')}%</b> de cada compra que hagan tus amigos, para siempre y directo a tu saldo 💸\n\n` +
       `🔗 Tu enlace personal:\n<code>${link}</code>\n${LINE}\n` +
-      `👥 Invitados: <b>${st.invited}</b>\n💰 Ganado: <b>${money(st.earned)} ${cur()}</b>`;
+      `👥 Invitados: <b>${st.invited}</b>\n💰 Ganado: <b>${fmt(st.earned)}</b>`;
     const share = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`🛍 ${s('shop_name')}: cuentas premium, IA y recargas con entrega automática`)}`;
     await show(ctx, text, navRow(new InlineKeyboard().url('📤 Compartir mi enlace', share), 'pf'));
   };
@@ -267,7 +301,7 @@ export function createBot() {
     try {
       const bal = await credit(Number(id), a, a > 0 ? 'recharge' : 'adjust', `Admin ${ctx.from.id}`);
       await ctx.reply(`✅ Nuevo saldo de ${id}: ${money(bal)}`);
-      if (a > 0) await sendTo(Number(id), `💰 Se acreditaron <b>${money(a)} ${cur()}</b> a tu saldo. Saldo actual: <b>${money(bal)}</b>`, { reply_markup: new InlineKeyboard().text('🛍 Ir a la tienda', 'st') });
+      if (a > 0) await sendTo(Number(id), `💰 Se acreditaron <b>${fmt(a)}</b> a tu saldo. Saldo actual: <b>${fmt(bal)}</b>`, { reply_markup: new InlineKeyboard().text('🛍 Ir a la tienda', 'st') });
     } catch (e) {
       await ctx.reply(`❌ ${e.message}`);
     }
@@ -298,7 +332,7 @@ export function createBot() {
     if (!r) return { ok: false, error: 'Ya fue procesada' };
     if (approve) {
       const bal = await credit(r.user_id, Number(r.amount), 'recharge', `Recarga #${r.id}`);
-      await sendTo(r.user_id, `✅ <b>¡Recarga aprobada!</b>\n${LINE}\n➕ ${money(r.amount)} ${cur()}\n💰 Saldo actual: <b>${money(bal)} ${cur()}</b>\n\n¡Ya puedes comprar! 🛍`, { reply_markup: new InlineKeyboard().text('🛍 Ir a la tienda', 'st').text('🔥 Más vendidos', 'top') });
+      await sendTo(r.user_id, `✅ <b>¡Recarga aprobada!</b>\n${LINE}\n➕ ${fmt(r.amount)}\n💰 Saldo actual: <b>${fmt(bal)}</b>\n\n¡Ya puedes comprar! 🛍`, { reply_markup: new InlineKeyboard().text('🛍 Ir a la tienda', 'st').text('🔥 Más vendidos', 'top') });
     } else {
       await sendTo(r.user_id, `❌ Tu solicitud de recarga #${r.id} fue rechazada. Si crees que es un error, contacta a ${esc(s('support_contact'))}.`, { reply_markup: new InlineKeyboard().text('🆘 Soporte', 'sup') });
     }
@@ -328,9 +362,16 @@ export function createBot() {
       }
     }
     if (st?.step === 'recharge_amount') {
+      if (copMode()) {
+        const pesos = Number(text.replace(/[^\d]/g, ''));
+        if (!pesos || pesos < minCop() || pesos > 20_000_000) {
+          return ctx.reply(`Escribe el monto en pesos, sin puntos (ej: 30000). Mínimo $${minCop().toLocaleString('es-CO')}.`);
+        }
+        return askProof(ctx, round4(pesos / copRate()), pesos);
+      }
       const amount = Number(text.replace(',', '.').replace(/[^\d.]/g, ''));
       if (!amount || amount < num('min_recharge') || amount > 100000) {
-        return ctx.reply(`Escribe un monto válido en ${cur()} (mínimo ${money(num('min_recharge'))}).`);
+        return ctx.reply(`Escribe un monto válido en ${cur()} (mínimo ${fmt(num('min_recharge'))}).`);
       }
       return askProof(ctx, amount);
     }
@@ -358,9 +399,12 @@ export async function setupCommands(bot) {
     { command: 'soporte', description: '🆘 Ayuda y soporte' },
     { command: 'cancelar', description: '❌ Cancelar la operación actual' },
   ]);
-  // Descripción que ven los clientes antes de pulsar "Iniciar"
+  // Nombre y descripción que ven los clientes antes de pulsar "Iniciar"
+  await bot.api.setMyName(`${s('shop_name')} 🔑`).catch(() => {});
   await bot.api.setMyDescription(
-    `🛍 ${s('shop_name')}\n\n🤖 IA · 🎬 Streaming · 🎨 Diseño · 💼 Office · 🎮 Recargas de juegos\n\n⚡ Entrega automática 24/7\n💳 Paga con Nequi, Bre-B o USDT\n🔒 Garantía en tus compras`,
+    `🔑 ${s('shop_name')} — todas tus suscripciones premium en un solo lugar.\n\n` +
+      '🤖 ChatGPT, Gemini, Claude · 🎬 Netflix, YouTube, Spotify · 🎨 Canva, CapCut · 💼 Office · 🎮 Recargas de juegos\n\n' +
+      '💵 Precios en pesos colombianos\n⚡ Entrega automática al instante 24/7\n🎁 Ñapa: te devolvemos saldo en cada compra\n⏰ Te avisamos antes de que venza tu suscripción\n🛡 Garantía y soporte en español',
   ).catch(() => {});
-  await bot.api.setMyShortDescription(`⚡ Cuentas premium, IA y recargas con entrega automática 24/7`).catch(() => {});
+  await bot.api.setMyShortDescription(`🔑 ${s('shop_name')}: IA, streaming y apps premium en pesos, con entrega al instante y ñapa en cada compra.`).catch(() => {});
 }

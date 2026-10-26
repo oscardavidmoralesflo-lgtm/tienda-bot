@@ -126,7 +126,7 @@ export function adminRouter(bot) {
     // ventas por categoría (30 días)
     const byCat = {};
     for (const t of top) byCat[categoryOf(t.product_name).label] = (byCat[categoryOf(t.product_name).label] || 0) + Number(t.revenue);
-    const colors = ['#7c5cfc', '#0ea971', '#2f80ed', '#d98a04', '#e5484d', '#d946ef', '#0891b2'];
+    const colors = ['#14b88c', '#e9a23b', '#2f80ed', '#0b7c8c', '#e5484d', '#7c3aed', '#94a3b8'];
     const parts = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([label, value], i) => ({ label, value, color: colors[i % colors.length] }));
     const maxTop = Math.max(1, ...top.map((t) => t.n));
 
@@ -140,7 +140,7 @@ export function adminRouter(bot) {
 
       <div class="grid g21" style="margin-top:16px">
         <div class="card"><div class="split"><div><h3>${icon('trend')} Ventas de los últimos 14 días</h3><p class="sub">Facturación y ganancia diaria en ${cur()}</p></div>
-          <div class="legend"><span><i style="background:#7c5cfc"></i>Facturado</span><span><i style="background:#0ea971"></i>Ganancia</span></div></div>
+          <div class="legend"><span><i style="background:#14b88c"></i>Facturado</span><span><i style="background:#e9a23b"></i>Ganancia</span></div></div>
           ${salesChart(series)}</div>
         <div class="card"><h3>${icon('wallet')} Saldos con proveedores</h3><p class="sub">Lo que tienes disponible para vender</p>
           <div class="grid" style="gap:12px">
@@ -184,7 +184,8 @@ export function adminRouter(bot) {
     const cards = pending.map((x) => `<div class="card"><div class="split" style="margin-bottom:12px">${who(x, x.user_id)}<span class="badge b-warn">#${x.id}</span></div>
         ${proof(x)}
         <div class="split" style="margin:12px 0 6px"><span class="muted">Monto declarado</span><b class="num" style="font-size:18px">${money(x.amount)} ${cur()}</b></div>
-        ${cop(x.amount) ? `<div class="split" style="margin-bottom:10px"><span class="muted">Debió pagar</span><b class="num">${cop(x.amount)}</b></div>` : ''}
+        ${x.amount_cop ? `<div class="split" style="margin-bottom:10px"><span class="muted">Dice que pagó</span><b class="num" style="color:var(--gold);font-size:18px">$${Number(x.amount_cop).toLocaleString('es-CO')} COP</b></div>`
+          : cop(x.amount) ? `<div class="split" style="margin-bottom:10px"><span class="muted">Debió pagar</span><b class="num">${cop(x.amount)}</b></div>` : ''}
         <p class="help" style="margin:0 0 12px">${icon('clock', 13)} ${fmtDate(x.created_at)} UTC</p>
         <form method="post" action="/admin/recharges/${x.id}" class="row">
           <input name="amount" class="in-sm num" value="${money(x.amount)}" inputmode="decimal" aria-label="Monto a acreditar" title="Puedes corregir el monto antes de aprobar">
@@ -547,10 +548,13 @@ export function adminRouter(bot) {
       ['payment_instructions', 'Instrucciones de pago', 'area', 'Tus métodos: llave Bre-B, Nequi, Binance… El cliente las ve al recargar.'],
       ['cop_rate', 'Pesos colombianos por 1 USD', 'text', 'auto = tasa del día + margen (recomendado). También un número fijo (ej: 3300) o 0 para no mostrar COP.'],
       ['cop_spread', 'Margen sobre la tasa automática (%)', 'number', 'Cubre lo que te cuesta convertir pesos a USDT. Recomendado: 3.'],
-      ['min_recharge', 'Recarga mínima', 'number'],
-      ['currency', 'Moneda que se muestra', 'text'],
+      ['price_display', 'Mostrar precios en', 'text', 'cop = pesos redondos ($5.400) — recomendado para Colombia · usd = USDT'],
+      ['min_recharge', 'Recarga mínima (USD)', 'number', 'En pesos se redondea a miles. Ej: 3 USD ≈ $10.000.'],
+      ['currency', 'Moneda interna', 'text'],
     ]],
-    ['crecimiento', 'users', 'Referidos y alertas', 'Crecimiento y avisos', [
+    ['crecimiento', 'users', 'Fidelización y referidos', 'Haz que tus clientes vuelvan', [
+      ['cashback_tiers', 'Ñapa por nivel', 'text', 'Formato COMPRADO_USD:%. Ej: 10:1,50:2,200:3 = Plata 1 %, Oro 2 %, Diamante 3 % devuelto en saldo en cada compra. Vacío = sin ñapa.'],
+      ['renew_reminder_days', 'Recordar renovación (días antes de vencer)', 'number', 'El bot avisa al cliente antes de que venza su suscripción, con botón para renovar. 0 = desactivado.'],
       ['referral_percent', 'Comisión por referido (%)', 'number', 'Lo que gana un cliente por cada compra de sus invitados. 0 = desactivado. Sale de tu ganancia.'],
       ['low_balance_alert', 'Avisarme si el saldo de un proveedor baja de (USD)', 'number'],
     ]],

@@ -77,3 +77,10 @@ CREATE TABLE IF NOT EXISTS overrides (
 
 -- Productos destacados (aparecen en "Más vendidos" del bot)
 ALTER TABLE overrides ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Recargas en pesos (lo que pagó el cliente) y fidelización
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS amount_cop NUMERIC(14,0);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashback_paid BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS renew_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reminded BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS orders_renew_idx ON orders (renew_at) WHERE reminded = FALSE;

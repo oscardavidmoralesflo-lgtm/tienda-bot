@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16C98F"/>
+      <stop offset="0.55" stop-color="#0B9A8A"/>
+      <stop offset="1" stop-color="#065A6B"/>
+    </linearGradient>
+    <radialGradient id="hl" cx="0.22" cy="0.12" r="0.75">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.32"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE7A3"/>
+      <stop offset="0.5" stop-color="#F7BE45"/>
+      <stop offset="1" stop-color="#E0921A"/>
+    </linearGradient>
+    <filter id="sh" filterUnits="userSpaceOnUse" x="-60" y="-60" width="632" height="632">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#03303A" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#hl)"/>
+  <g transform="translate(256 258) scale(0.9) translate(-242 -237)">
+  <!-- argolla del llavero -->
+  <circle cx="138" cy="132" r="50" fill="none" stroke="url(#gold)" stroke-width="16" filter="url(#sh)"/>
+  <g filter="url(#sh)" stroke="#ffffff" stroke-linecap="round" fill="none">
+    <!-- cabeza de la llave -->
+    <circle cx="212" cy="208" r="76" stroke-width="42"/>
+    <!-- vástago -->
+    <path d="M266 262 L384 380" stroke-width="42"/>
+    <!-- dientes -->
+    <path d="M326 322 L356 292" stroke-width="34"/>
+    <path d="M366 362 L396 332" stroke-width="34"/>
+  </g>
+  <!-- destello premium -->
+  <path d="M212 168 C217 196 224 203 252 208 C224 213 217 220 212 248 C207 220 200 213 172 208 C200 203 207 196 212 168 Z" fill="url(#gold)"/>
+  </g>
+</svg>

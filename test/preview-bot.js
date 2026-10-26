@@ -30,7 +30,7 @@ const screens = [];
 let msgId = 100;
 const bot = createBot();
 bot.api.config.use(async (prev, method, payload) => {
-  if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Mi Tienda Digital', username: 'MiTiendaDigital2847_bot' } };
+  if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Llavero', username: 'MiTiendaDigital2847_bot' } };
   if (['sendMessage', 'editMessageText', 'sendPhoto'].includes(method)) {
     screens.push({ method, text: payload.text || payload.caption || '', kb: payload.reply_markup?.inline_keyboard || [] });
     return { ok: true, result: { message_id: ++msgId, date: 0, chat: { id: 7, type: 'private' }, text: payload.text } };
@@ -56,10 +56,10 @@ const buyBtn = screens.at(-1).kb.flat().find((b) => b.callback_data.startsWith('
 label('🛒 Comprar ahora → confirmación'); await tap(buyBtn);
 label('🎮 Juegos y Gift Cards'); await tap('g:topup:0');
 label('Free Fire'); await tap('gg:topup:free-fire');
+label('🔎 Búsqueda escribiendo "gemini"'); await send('gemini');
 label('👤 Mi perfil'); await tap('pf');
 label('💰 Recargar saldo'); await tap('recharge');
-label('Elegir 10 USDT'); await tap('amt:10');
-label('🔎 Búsqueda escribiendo "gemini"'); await send('gemini');
+label('Elegir $20.000'); await tap('amc:20000');
 label('🎁 Invita y gana'); await tap('ref');
 
 // --- HTML tipo Telegram ---

@@ -4,6 +4,7 @@ import { kokoro } from './kokoro.js';
 import { bunny } from './bunny.js';
 import * as cache from './cache.js';
 import { setAutoCop } from './pricing.js';
+import { sendRenewals } from './orders.js';
 
 const KINDS = ['topup', 'giftcard', 'key'];
 export const lastRefresh = { at: null, ok: 0, total: 0, ms: 0 };
@@ -41,6 +42,7 @@ async function tick() {
   const r = await cache.refreshAll({ always: ['k:products', 'b:products', ...KINDS.map((k) => `k:games::${k}:0`)] });
   Object.assign(lastRefresh, { at: new Date(), ...r, ms: Date.now() - t });
   updateFx();
+  sendRenewals().catch((e) => console.error('renovaciones', e.message));
   // Render (plan gratis) duerme el servidor tras 15 min sin visitas: esta visita lo mantiene despierto
   if (config.publicUrl && process.env.KEEP_ALIVE !== '0') {
     fetch(`${config.publicUrl}/health`, { signal: AbortSignal.timeout(10_000) }).catch(() => {});

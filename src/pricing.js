@@ -76,21 +76,21 @@ export function productUnitPrice(product, qty = 1) {
   if (o?.fixed_price != null) {
     // precio fijo por unidad; los descuentos por volumen se aplican en la misma proporción
     const ratio = Number(product.price) > 0 ? cost / Number(product.price) : 1;
-    return round2(Number(o.fixed_price) * ratio);
+    return finalize(round2(Number(o.fixed_price) * ratio));
   }
   const markup = o?.markup != null ? Number(o.markup) : tierPct(cost, 'products');
   // la ganancia mínima es por pedido: en compras por volumen se reparte entre las unidades
-  return applyMarkup(cost, markup, num('min_profit_products') / Math.max(1, qty));
+  return finalize(applyMarkup(cost, markup, num('min_profit_products') / Math.max(1, qty)));
 }
 
 // ---- Juegos (packs) ----
 export function packPrice(pack, gameId) {
   const po = getOverride(pack.id);
-  if (po?.fixed_price != null) return round2(po.fixed_price);
+  if (po?.fixed_price != null) return finalize(round2(po.fixed_price));
   const go = getOverride(gameId || pack.game_id);
   const cost = Number(pack.price);
   const markup = po?.markup != null ? Number(po.markup) : go?.markup != null ? Number(go.markup) : tierPct(cost, 'games');
-  return applyMarkup(cost, markup, num('min_profit_games'));
+  return finalize(applyMarkup(cost, markup, num('min_profit_games')));
 }
 
 export function gameFromPrice(game) {
@@ -98,7 +98,7 @@ export function gameFromPrice(game) {
   const go = getOverride(game.id);
   const cost = Number(game.from_price);
   const markup = go?.markup != null ? Number(go.markup) : tierPct(cost, 'games');
-  return applyMarkup(cost, markup, num('min_profit_games'));
+  return finalize(applyMarkup(cost, markup, num('min_profit_games')));
 }
 
 // Equivalente en pesos colombianos (redondeado hacia arriba a 100 COP). Vacío si no hay tasa.
@@ -115,4 +115,31 @@ export function cop(usd) {
   const v = Math.ceil((Number(usd) * rate) / 100) * 100;
   return v.toLocaleString('es-CO') + ' COP';
 }
-export const copSuffix = (usd) => (cop(usd) ? ` (≈ ${cop(usd)})` : '');
+export const copSuffix = (usd) => (!copMode() && cop(usd) ? ` (≈ ${cop(usd)})` : '');
+
+// ---------- Precios en pesos colombianos "limpios" ----------
+export const round4 = (n) => Math.round((Number(n) + Number.EPSILON) * 10000) / 10000;
+// true = el bot muestra y cobra en pesos (con tasa disponible)
+export function copMode() {
+  return String(setting('price_display') || 'cop').toLowerCase() === 'cop' && copRate() > 0;
+}
+// Redondeo comercial: menos de 5.000 → a la centena; desde 5.000 → termina en 400 o 900 (ej: 5.209 → 5.400, 23.423 → 23.900)
+export function cleanCop(v) {
+  if (!(v > 0)) return 0;
+  if (v < 5000) return Math.ceil(v / 100) * 100;
+  return Math.ceil((v + 100) / 500) * 500 - 100;
+}
+// convierte un precio en USD al USD equivalente de un precio redondo en pesos (lo que se cobra y se muestra coincide)
+export function finalize(usd) {
+  if (!copMode()) return usd;
+  const r = copRate();
+  return round4(cleanCop(usd * r) / r);
+}
+const pesos = (usd) => {
+  const v = Math.round((Number(usd) * copRate()) / 10) * 10;
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('es-CO');
+};
+// Formato para clientes: "$5.400 COP" en modo pesos, "1.59 USDT" si no
+export const fmt = (usd) => (copMode() ? `${pesos(usd)} COP` : `${money(usd)} ${setting('currency')}`);
+// Formato corto para botones: "$5.400" (en Colombia el $ es peso) o "$1.59"
+export const fmtS = (usd) => (copMode() ? pesos(usd) : `$${money(usd)}`);

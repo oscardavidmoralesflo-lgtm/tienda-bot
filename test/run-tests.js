@@ -173,7 +173,7 @@ await test('ajustes guardados', async () => {
 });
 
 await test('margen por tramos + ganancia mínima por pedido + precio en COP', async () => {
-  await saveSettings({ price_tiers_products: '1:60,3:40,10:30,30:20,*:12', min_profit_products: '0.20', price_tiers_games: '5:20,20:12,*:8', min_profit_games: '0.10', cop_rate: '4100' });
+  await saveSettings({ price_tiers_products: '1:60,3:40,10:30,30:20,*:12', min_profit_products: '0.20', price_tiers_games: '5:20,20:12,*:8', min_profit_games: '0.10', cop_rate: '4100', price_display: 'usd' });
   const p = (c, extra = {}) => ({ id: 'x' + c, price: c, bulk_discounts: [], ...extra });
   assert.equal(pricing.productUnitPrice(p(0.04)), 0.24);        // barato: manda la ganancia mínima (0.04 + 0.20)
   assert.equal(pricing.productUnitPrice(p(0.04), 10), 0.07);    // por volumen la mínima se reparte: 0.04 + 0.02 → 60 % = 0.07
@@ -185,6 +185,27 @@ await test('margen por tramos + ganancia mínima por pedido + precio en COP', as
   assert.equal(pricing.cop(2.1), '8.700 COP');
   await saveSettings({ cop_rate: '0' });
   assert.equal(pricing.copSuffix(2.1), '');
+});
+
+await test('precios en pesos redondos: lo que se muestra es exactamente lo que se cobra', async () => {
+  await saveSettings({ cop_rate: '3276', price_display: 'cop' });
+  assert.equal(pricing.cleanCop(5209), 5400);
+  assert.equal(pricing.cleanCop(23423), 23900);
+  assert.equal(pricing.cleanCop(2621), 2700);
+  assert.equal(pricing.cleanCop(9140), 9400);
+  const p = { id: 'cp1', price: 0.99, bulk_discounts: [] }; // Gemini 18 meses
+  const usd = pricing.productUnitPrice(p);
+  assert.equal(pricing.fmtS(usd), '$5.400');
+  assert.equal(pricing.fmt(usd), '$5.400 COP');
+  assert.equal(Math.round(pricing.round4(usd * 3) * 3276), 16200); // 3 unidades = 16.200 exactos
+  // el cliente con saldo de 5.400 puede pagarlo
+  await users.upsertUser({ id: 555, first_name: 'Cop' });
+  await users.credit(555, usd, 'recharge', 'test');
+  const prod = (await kokoro.products()).find((x) => x.id === 'netflix_1m');
+  const unit = pricing.productUnitPrice(prod);
+  assert.ok(pricing.fmtS(unit).endsWith('00'));
+  await saveSettings({ cop_rate: '0', price_display: 'cop' });
+  assert.equal(pricing.fmt(1.5), '1.50 USDT'); // sin tasa vuelve a USDT
 });
 
 await test('caché: responde al instante con dato viejo y refresca en segundo plano', async () => {
@@ -213,6 +234,28 @@ await test('categorías de la tienda y productos prohibidos ocultos', async () =
   assert.equal(categoryOf('Windows 10/11 Pro Key').key, 'office');
   const { ALWAYS_HIDDEN } = await import('../src/catalog-groups.js');
   assert.ok(ALWAYS_HIDDEN.includes('links_shops_ccs') && ALWAYS_HIDDEN.includes('method_capcut'));
+});
+
+await test('ñapa por nivel y recordatorio de renovación', async () => {
+  const { query: q } = await import('../src/db.js');
+  await users.upsertUser({ id: 777, first_name: 'Fiel' });
+  await users.credit(777, 100, 'recharge', 'test');
+  const p = (await kokoro.products()).find((x) => x.id === 'netflix_1m');
+  // compra 1: 15 USD acumulados → Plata (1 %)
+  const r1 = await orders.buyProduct({ userId: 777, product: { ...p, name: 'Netflix 1 Mes', _unitCost: 3 }, quantity: 1, unitPrice: 15 });
+  assert.equal(r1.order.status, 'delivered');
+  const cb = await one("SELECT * FROM transactions WHERE user_id=777 AND type='cashback'");
+  assert.equal(Number(cb.amount), 0.15);
+  assert.ok(sent.some(([to, t]) => to === 777 && t.includes('ñapa')));
+  // renovación programada a 30 - 3 = 27 días
+  const o = await one('SELECT renew_at FROM orders WHERE id=$1', [r1.order.id]);
+  const days = (new Date(o.renew_at) - Date.now()) / 86400000;
+  assert.ok(days > 26.9 && days < 27.1);
+  // al vencer se envía el recordatorio una sola vez
+  await q("UPDATE orders SET renew_at = now() - interval '1 minute' WHERE id=$1", [r1.order.id]);
+  assert.equal(await orders.sendRenewals(), 1);
+  assert.equal(await orders.sendRenewals(), 0);
+  assert.ok(sent.some(([to, t]) => to === 777 && t.includes('vence en')));
 });
 
 console.log(`\n${pass} pruebas OK`);

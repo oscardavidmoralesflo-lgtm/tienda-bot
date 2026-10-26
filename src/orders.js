@@ -6,8 +6,9 @@ import { kokoro, KokoroError } from './kokoro.js';
 import { bunny, BunnyError, balanceOf } from './bunny.js';
 import { credit, getUser } from './users.js';
 import { num, s } from './settings.js';
-import { money, round2 } from './pricing.js';
+import { money, round2, round4, fmt } from './pricing.js';
 import { esc, errorEs } from './util.js';
+import { levelOf, durationDays } from './loyalty.js';
 
 let notifier = { user: async () => {}, admins: async () => {} };
 export const setNotifier = (n) => { notifier = n; };
@@ -52,7 +53,7 @@ export async function refundOrder(orderId, reason) {
   await notifier.user(o.user_id,
     `↩️ <b>Pedido #${o.id} reembolsado</b>\n${esc(o.product_name)}\n` +
     (reason ? `Motivo: ${esc(reason)}\n` : '') +
-    `Se devolvieron <b>${money(o.price)} ${s('currency')}</b> a tu saldo. Saldo actual: <b>${money(bal)}</b>`);
+    `Se devolvieron <b>${fmt(o.price)}</b> a tu saldo. Saldo actual: <b>${fmt(bal)}</b>`);
   return o;
 }
 
@@ -66,7 +67,7 @@ async function payReferral(o) {
   const amount = round2((Number(o.price) * pct) / 100);
   if (amount <= 0) return;
   await credit(u.referred_by, amount, 'referral', `Comisión por compra de ${u.first_name || u.id}`, o.id);
-  await notifier.user(u.referred_by, `🎁 Ganaste <b>${money(amount)} ${s('currency')}</b> por la compra de un referido.`);
+  await notifier.user(u.referred_by, `🎁 Ganaste <b>${fmt(amount)}</b> por la compra de un referido.`);
 }
 
 async function checkLowBalance(remaining) {
@@ -89,13 +90,52 @@ async function markDelivered(o, delivery, kokoroOrderId) {
   );
   if (!updated) return null;
   await payReferral(updated);
+  await payCashback(updated).catch((e) => console.error('ñapa', e.message));
+  await scheduleRenewal(updated).catch((e) => console.error('renovación', e.message));
   return updated;
+}
+
+// ===================== FIDELIZACIÓN =====================
+// "Ñapa": devuelve un % de la compra en saldo según el nivel del cliente
+async function payCashback(o) {
+  const r = await one("SELECT COALESCE(sum(price),0) AS t FROM orders WHERE user_id=$1 AND status='delivered'", [o.user_id]);
+  const lvl = levelOf(Number(r.t));
+  if (!(lvl.pct > 0)) return;
+  const marked = await one('UPDATE orders SET cashback_paid = TRUE WHERE id=$1 AND cashback_paid = FALSE RETURNING id', [o.id]);
+  if (!marked) return;
+  const amount = round4((Number(o.price) * lvl.pct) / 100);
+  if (amount <= 0) return;
+  await credit(o.user_id, amount, 'cashback', `Ñapa ${lvl.pct}% pedido #${o.id}`, o.id);
+  await notifier.user(o.user_id, `🎁 <b>¡Tu ñapa!</b> Te devolvimos <b>${fmt(amount)}</b> (${lvl.pct}%) por ser cliente ${lvl.name}. Ya está en tu saldo.`);
+}
+
+// Programa el recordatorio de renovación (ej: Netflix 1 mes → aviso 3 días antes de vencer)
+async function scheduleRenewal(o) {
+  const before = num('renew_reminder_days');
+  const days = durationDays(o.product_name);
+  if (!(before > 0) || !days || days <= before + 1 || o.kind === 'game') return;
+  await query(`UPDATE orders SET renew_at = now() + ($2 || ' days')::interval WHERE id = $1`, [o.id, String(days - before)]);
+}
+
+export async function sendRenewals() {
+  const due = await many(
+    `SELECT * FROM orders WHERE status='delivered' AND reminded = FALSE AND renew_at IS NOT NULL AND renew_at <= now()
+     ORDER BY renew_at LIMIT 25`,
+  );
+  for (const o of due) {
+    const mark = await one('UPDATE orders SET reminded = TRUE WHERE id=$1 AND reminded = FALSE RETURNING id', [o.id]);
+    if (!mark) continue;
+    await notifier.user(o.user_id,
+      `⏰ <b>Tu ${esc(o.product_name)} vence en ${num('renew_reminder_days')} días</b>\n\nRenuévalo ahora en un toque y sigue sin interrupciones. 🔑`,
+      { reply_markup: { inline_keyboard: [[{ text: '🔁 Renovar ahora', callback_data: `rn:${o.id}` }], [{ text: '🛍 Ver tienda', callback_data: 'st' }]] } });
+  }
+  return due.length;
 }
 
 // ===================== PRODUCTOS DIGITALES =====================
 export async function buyProduct({ userId, product, quantity, unitPrice, activationData }) {
   const cost = round2(Number(product._unitCost ?? product.price) * quantity);
-  const price = round2(unitPrice * quantity);
+  const price = round4(unitPrice * quantity);
   const isBunny = product.source === 'bunny';
   const o = await createOrder({
     userId, kind: isBunny ? 'bunny' : 'product', productId: product.id, productName: product.name, quantity, cost, price,
@@ -182,7 +222,7 @@ export async function deliverManually(orderId, delivery) {
 // ===================== JUEGOS / GIFT CARDS / KEYS =====================
 export async function buyGamePack({ userId, pack, game, unitPrice, quantity = 1, fields, country }) {
   const cost = round2(Number(pack.price) * quantity);
-  const price = round2(unitPrice * quantity);
+  const price = round4(unitPrice * quantity);
   const name = `${game?.name || pack.name} — ${pack.pack || pack.name}${quantity > 1 ? ` x${quantity}` : ''}`;
   const o = await createOrder({
     userId, kind: 'game', productId: pack.id, productName: name, quantity, cost, price,

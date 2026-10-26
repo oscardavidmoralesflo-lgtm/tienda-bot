@@ -55,30 +55,30 @@ const FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link r
 
 const CSS = `
 :root{
-  --bg:#f4f5fb;--bg2:#eceef7;--surface:#ffffff;--surface2:#f8f9fd;--border:#e3e6f0;--border2:#d5d9e8;
-  --text:#0f1222;--text2:#4b5168;--muted:#8a90a8;
-  --brand:#6d5efc;--brand2:#9b5cf6;--brand-soft:rgba(109,94,252,.10);
+  --bg:#f2f7f6;--bg2:#e8f1ef;--surface:#ffffff;--surface2:#f6faf9;--border:#dfe9e6;--border2:#cbdcd7;
+  --text:#0b1b19;--text2:#45605b;--muted:#7f9893;
+  --brand:#0b9a7e;--brand2:#0b7c8c;--brand-soft:rgba(11,154,126,.11);--gold:#e9a23b;--gold-soft:rgba(233,162,59,.14);
   --ok:#0ea971;--ok-soft:rgba(14,169,113,.11);--bad:#e5484d;--bad-soft:rgba(229,72,77,.11);
   --warn:#d98a04;--warn-soft:rgba(217,138,4,.13);--info:#2f80ed;--info-soft:rgba(47,128,237,.11);
   --shadow:0 1px 2px rgba(16,20,45,.04),0 8px 24px -12px rgba(16,20,45,.12);
-  --radius:16px;--grad:linear-gradient(135deg,#6d5efc 0%,#9b5cf6 55%,#d946ef 100%);
+  --radius:16px;--grad:linear-gradient(135deg,#16c98f 0%,#0b9a8a 55%,#065a6b 100%);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --bg:#0a0b14;--bg2:#0e1020;--surface:#12142a;--surface2:#171a33;--border:#23274a;--border2:#2e3360;
-  --text:#eef0ff;--text2:#b5b9d6;--muted:#7a7fa3;--brand-soft:rgba(124,110,255,.16);
+  --bg:#06110f;--bg2:#091815;--surface:#0c1c19;--surface2:#10241f;--border:#19352f;--border2:#22463e;
+  --text:#ecf7f4;--text2:#a9c5be;--muted:#6f8f88;--brand:#19c99a;--brand-soft:rgba(25,201,154,.14);--gold-soft:rgba(240,180,70,.15);
   --ok-soft:rgba(20,200,135,.14);--bad-soft:rgba(240,90,95,.15);--warn-soft:rgba(245,170,30,.15);--info-soft:rgba(70,150,255,.15);
   --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px -15px rgba(0,0,0,.6);
 }}
 :root[data-theme=dark]{
-  --bg:#0a0b14;--bg2:#0e1020;--surface:#12142a;--surface2:#171a33;--border:#23274a;--border2:#2e3360;
-  --text:#eef0ff;--text2:#b5b9d6;--muted:#7a7fa3;--brand-soft:rgba(124,110,255,.16);
+  --bg:#06110f;--bg2:#091815;--surface:#0c1c19;--surface2:#10241f;--border:#19352f;--border2:#22463e;
+  --text:#ecf7f4;--text2:#a9c5be;--muted:#6f8f88;--brand:#19c99a;--brand-soft:rgba(25,201,154,.14);--gold-soft:rgba(240,180,70,.15);
   --ok-soft:rgba(20,200,135,.14);--bad-soft:rgba(240,90,95,.15);--warn-soft:rgba(245,170,30,.15);--info-soft:rgba(70,150,255,.15);
   --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px -15px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased}
-body:before{content:"";position:fixed;inset:-20% -10% auto auto;width:720px;height:720px;background:radial-gradient(closest-side,rgba(124,92,252,.13),transparent);pointer-events:none;z-index:0}
+body:before{content:"";position:fixed;inset:-20% -10% auto auto;width:720px;height:720px;background:radial-gradient(closest-side,rgba(22,201,143,.12),transparent);pointer-events:none;z-index:0}
 a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
 .ic{flex:none;vertical-align:-3px}
 .num{font-variant-numeric:tabular-nums}
@@ -86,7 +86,7 @@ a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
 .app{display:grid;grid-template-columns:256px 1fr;min-height:100vh;position:relative;z-index:1}
 .side{position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--border);background:color-mix(in oklab,var(--surface) 72%,transparent);backdrop-filter:blur(14px);display:flex;flex-direction:column;gap:6px;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:11px;padding:4px 8px 18px}
-.logo{width:38px;height:38px;border-radius:12px;background:var(--grad);display:grid;place-items:center;color:#fff;box-shadow:0 8px 20px -8px rgba(124,92,252,.8)}
+.logo{width:38px;height:38px;border-radius:12px;background:var(--grad);display:grid;place-items:center;color:#fff;box-shadow:0 8px 20px -8px rgba(11,154,126,.8);overflow:hidden}
 .brand b{display:block;font-size:15px;letter-spacing:-.01em}.brand small{color:var(--muted);font-size:12px}
 .navsec{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 10px 6px}
 .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;color:var(--text2);font-weight:500;text-decoration:none;transition:background .15s,color .15s}
@@ -143,7 +143,7 @@ input,select,textarea{font:inherit;color:var(--text);background:var(--surface2);
 input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-soft)}
 textarea{width:100%;min-height:120px;resize:vertical}
 .in-sm{width:84px;padding:7px 10px}
-.btn,button{font:inherit;font-weight:600;border:0;border-radius:11px;padding:9px 15px;background:var(--grad);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;box-shadow:0 6px 16px -8px rgba(124,92,252,.75);transition:transform .08s,filter .15s}
+.btn,button{font:inherit;font-weight:600;border:0;border-radius:11px;padding:9px 15px;background:var(--grad);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;box-shadow:0 6px 16px -8px rgba(11,154,126,.75);transition:transform .08s,filter .15s}
 .btn:hover,button:hover{filter:brightness(1.07);text-decoration:none}.btn:active,button:active{transform:translateY(1px)}
 .btn.ghost,button.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none}
 .btn.ghost:hover,button.ghost:hover{background:var(--surface2)}
@@ -206,7 +206,11 @@ const JS = `
 })();
 `;
 
-const AV_COLORS = ['#6d5efc', '#0ea971', '#e5484d', '#d98a04', '#2f80ed', '#d946ef', '#0891b2', '#7c3aed'];
+// Logo de la marca (llave con argolla dorada) para la barra lateral y el login
+let logoSeq = 0;
+export const logoMark = (size = 38, k = ++logoSeq) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="lgbg${k}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16C98F"/><stop offset=".55" stop-color="#0B9A8A"/><stop offset="1" stop-color="#065A6B"/></linearGradient><linearGradient id="lggd${k}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE7A3"/><stop offset=".5" stop-color="#F7BE45"/><stop offset="1" stop-color="#E0921A"/></linearGradient></defs><rect width="512" height="512" rx="116" fill="url(#lgbg${k})"/><g transform="translate(256 258) scale(0.9) translate(-242 -237)"><circle cx="138" cy="132" r="50" fill="none" stroke="url(#lggd${k})" stroke-width="16"/><g stroke="#fff" stroke-linecap="round" fill="none"><circle cx="212" cy="208" r="76" stroke-width="42"/><path d="M266 262 L384 380" stroke-width="42"/><path d="M326 322 L356 292" stroke-width="34"/><path d="M366 362 L396 332" stroke-width="34"/></g><path d="M212 168 C217 196 224 203 252 208 C224 213 217 220 212 248 C207 220 200 213 172 208 C200 203 207 196 212 168 Z" fill="url(#lggd${k})"/></g></svg>`;
+
+const AV_COLORS = ['#0b9a7e', '#e9a23b', '#2f80ed', '#e5484d', '#0891b2', '#7c3aed', '#d98a04', '#059669'];
 export function avatar(name, id) {
   const n = String(name || '?').trim();
   const initials = (n.split(/\s+/).slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
@@ -220,14 +224,14 @@ function shell(title, inner, { flash = '', path = '', badges = {}, shop = 'Panel
     const b = badgeKey && badges[badgeKey] ? `<span class="badge ${badgeKey === 'recharges' ? 'b-warn' : 'b-brand'}">${badges[badgeKey]}</span>` : '';
     return `<a href="${href}" class="${on ? 'on' : ''}">${icon(ic)}<span>${label}</span>${b}</a>`;
   }).join('')}</nav>`).join('');
-  const brand = `<div class="brand"><div class="logo">${icon('bag', 20)}</div><div><b>${esc(shop)}</b><small>Panel de administración</small></div></div>`;
+  const brand = () => `<div class="brand"><div class="logo" style="background:none;box-shadow:0 8px 20px -8px rgba(11,154,126,.8)">${logoMark(38)}</div><div><b>${esc(shop)}</b><small>Tu tienda premium · panel</small></div></div>`;
   const toast = flash
     ? `<div class="toast" role="status"><span class="chip ${/error|inválid|no se pudo|falt/i.test(flash) ? 'c-bad' : 'c-ok'}">${icon(/error|inválid|no se pudo|falt/i.test(flash) ? 'x' : 'check', 16)}</span><span>${esc(flash)}</span></div>`
     : '';
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} · ${esc(shop)}</title><meta name="theme-color" content="#6d5efc">${FONT}<style>${CSS}</style><script>${JS}</script></head><body>
-<div class="mobilebar">${brand}<button class="ghost sm" data-nav onclick="toggleNav()" aria-label="Menú">${icon('menu')}</button></div>
-<div class="app"><aside class="side">${brand}${nav}
+<title>${esc(title)} · ${esc(shop)}</title><meta name="theme-color" content="#0b9a7e">${FONT}<style>${CSS}</style><script>${JS}</script></head><body>
+<div class="mobilebar">${brand()}<button class="ghost sm" data-nav onclick="toggleNav()" aria-label="Menú">${icon('menu')}</button></div>
+<div class="app"><aside class="side">${brand()}${nav}
 <div class="foot"><div class="status"><span class="dot ${maintenance ? 'warn' : ''}"></span>${maintenance ? 'Bot en mantenimiento' : 'Bot en línea · precios cada 3 min'}</div>
 <button class="ghost sm" onclick="toggleTheme()">${icon('moon', 16)} Cambiar tema</button>
 <form method="post" action="/admin/logout"><button class="ghost sm" style="width:100%">${icon('logout', 16)} Cerrar sesión</button></form></div></aside>
@@ -240,7 +244,7 @@ export function page(title, body, opts = {}) {
   return shell(title, head + body, opts);
 }
 
-export function loginPage(error = '', shop = 'Mi Tienda') {
+export function loginPage(error = '', shop = 'Llavero') {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Entrar · ${esc(shop)}</title>${FONT}<style>${CSS}
 .login{min-height:100vh;display:grid;place-items:center;padding:20px;position:relative;z-index:1}
@@ -251,7 +255,7 @@ export function loginPage(error = '', shop = 'Mi Tienda') {
 .lcard button{width:100%;justify-content:center;padding:12px}
 .lcard .err{display:flex;gap:8px;align-items:center;background:var(--bad-soft);color:var(--bad);padding:10px 12px;border-radius:11px;margin-bottom:14px;font-weight:500}
 </style><script>${JS}</script></head><body><div class="login"><div class="card lcard">
-<div class="logo">${icon('bag', 24)}</div><h1>${esc(shop)}</h1><p class="muted" style="margin:0 0 22px">Entra a tu panel de administración</p>
+<div class="logo" style="background:none">${logoMark(52)}</div><h1>${esc(shop)}</h1><p class="muted" style="margin:0 0 22px">Entra a tu panel de administración</p>
 ${error ? `<div class="err">${icon('x', 16)} ${esc(error)}</div>` : ''}
 <form method="post" action="/admin/login"><div class="field"><label for="pw">Contraseña</label><input id="pw" type="password" name="password" autofocus autocomplete="current-password" placeholder="••••••••••"></div>
 <button>${icon('shield', 16)} Entrar al panel</button></form>
@@ -273,12 +277,12 @@ export function salesChart(series) {
   }).join('');
   const labels = series.map((d, i) => (i % 2 === series.length % 2 || i === series.length - 1)
     ? `<text x="${x(i)}" y="${H - 9}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.label}</text>` : '').join('');
-  const dots = series.map((d, i) => `<circle cx="${x(i)}" cy="${y(d.revenue)}" r="3.2" fill="var(--surface)" stroke="#7c5cfc" stroke-width="2"><title>${d.label}: ${d.revenue.toFixed(2)} facturado · ${d.profit.toFixed(2)} ganancia · ${d.orders} ventas</title></circle>`).join('');
+  const dots = series.map((d, i) => `<circle cx="${x(i)}" cy="${y(d.revenue)}" r="3.2" fill="var(--surface)" stroke="#14b88c" stroke-width="2"><title>${d.label}: ${d.revenue.toFixed(2)} facturado · ${d.profit.toFixed(2)} ganancia · ${d.orders} ventas</title></circle>`).join('');
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ventas de los últimos ${series.length} días">
-<defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#7c5cfc" stop-opacity=".35"/><stop offset="1" stop-color="#7c5cfc" stop-opacity="0"/></linearGradient>
-<linearGradient id="gp" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#0ea971" stop-opacity=".28"/><stop offset="1" stop-color="#0ea971" stop-opacity="0"/></linearGradient></defs>
-${ticks}<path d="${area('revenue')}" fill="url(#gr)"/><path d="${line('revenue')}" fill="none" stroke="#7c5cfc" stroke-width="2.5" stroke-linejoin="round"/>
-<path d="${area('profit')}" fill="url(#gp)"/><path d="${line('profit')}" fill="none" stroke="#0ea971" stroke-width="2.2" stroke-linejoin="round"/>${dots}${labels}</svg>`;
+<defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#14b88c" stop-opacity=".35"/><stop offset="1" stop-color="#14b88c" stop-opacity="0"/></linearGradient>
+<linearGradient id="gp" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e9a23b" stop-opacity=".30"/><stop offset="1" stop-color="#e9a23b" stop-opacity="0"/></linearGradient></defs>
+${ticks}<path d="${area('revenue')}" fill="url(#gr)"/><path d="${line('revenue')}" fill="none" stroke="#14b88c" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="${area('profit')}" fill="url(#gp)"/><path d="${line('profit')}" fill="none" stroke="#e9a23b" stroke-width="2.2" stroke-linejoin="round"/>${dots}${labels}</svg>`;
 }
 
 // Dona por categoría
