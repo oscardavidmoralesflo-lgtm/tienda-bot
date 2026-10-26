@@ -95,3 +95,7 @@ ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_url TEXT;
 ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_ref TEXT;
 ALTER TABLE recharges ADD COLUMN IF NOT EXISTS bold_total NUMERIC(14,0);
 CREATE INDEX IF NOT EXISTS recharges_bold_link_idx ON recharges (bold_link);
+
+-- Recargas automáticas con Binance (ID de la orden o TxID, único para no acreditar dos veces)
+ALTER TABLE recharges ADD COLUMN IF NOT EXISTS ext_tx TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS recharges_ext_tx_uq ON recharges (ext_tx) WHERE ext_tx IS NOT NULL;

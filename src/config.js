@@ -8,6 +8,10 @@ export const config = {
   kokoroBase: (process.env.KOKORO_BASE_URL || 'https://api.shopdigital.app').replace(/\/$/, ''),
   // Segundo proveedor (opcional): Bunny AI Store
   bunnyKey: process.env.BUNNY_API_KEY || '',
+  // Recargas automáticas con Binance (llave de SOLO LECTURA)
+  binanceKey: process.env.BINANCE_API_KEY || '',
+  binanceSecret: process.env.BINANCE_API_SECRET || '',
+  binanceBase: (process.env.BINANCE_BASE_URL || 'https://api.binance.com').replace(/\/$/, ''),
   // Recargas automáticas con Bold (llave de identidad y llave secreta de "Botón de pagos")
   boldApiKey: process.env.BOLD_API_KEY || '',
   boldSecretKey: process.env.BOLD_SECRET_KEY || '',

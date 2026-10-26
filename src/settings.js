@@ -20,8 +20,13 @@ export const DEFAULTS = {
   renew_reminder_days: '3',    // días antes del vencimiento para recordar la renovación (0 = desactivado)
   // Bono por recargas grandes (en pesos): "100000:3,200000:5" = +3 % desde $100.000, +5 % desde $200.000
   recharge_bonus: '100000:3,200000:5',
+  // Recargas automáticas con Binance (USDT): el cliente paga y envía el Order ID / TxID
+  binance_enabled: '1',
+  binance_pay_id: '',      // tu Binance Pay ID (número)
+  binance_trc20: '',       // tu dirección USDT TRC20 (opcional)
+  binance_bep20: '',       // tu dirección USDT BEP20/BSC (opcional)
   // Recargas automáticas con Bold (PSE, Nequi, Botón Bancolombia)
-  bold_enabled: '1',
+  bold_enabled: '0', // las pasarelas colombianas no permiten este tipo de productos; se deja apagado
   bold_methods: 'PSE,NEQUI,BOTON_BANCOLOMBIA',
   bold_surcharge: '3.5', // % que paga el cliente por usar la pasarela (cubre la comisión de Bold). 0 = la asumes tú
   // Textos en inglés (clientes que eligen English)

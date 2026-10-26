@@ -56,6 +56,19 @@ export function startMock(port = 4010) {
     res.json({ api_version: 1, id: l.id, total: l.total, status: l.status, reference: l.reference, is_sandbox: true });
   });
   app.locals.boldLinks = boldLinks;
+  // ---- Binance (solo lectura, firma HMAC del query) ----
+  const binancePays = [];
+  const binanceDeps = [];
+  app.use('/binance', async (req, res, next) => {
+    const crypto = await import('node:crypto');
+    const raw = req.originalUrl.split('?')[1] || '';
+    const qs = raw.replace(/&signature=[a-f0-9]+$/, '');
+    const sig = crypto.createHmac('sha256', 'bnsecret_test').update(qs).digest('hex');
+    if (req.headers['x-mbx-apikey'] !== 'bnkey_test' || !raw.endsWith(`signature=${sig}`)) return res.status(401).json({ code: -2015, msg: 'Invalid API-key' });
+    next();
+  });
+  app.get('/binance/sapi/v1/pay/transactions', (req, res) => res.json({ code: '000000', message: 'success', data: binancePays, success: true }));
+  app.get('/binance/sapi/v1/capital/deposit/hisrec', (req, res) => res.json(binanceDeps));
 
   const auth = (req, res, next) => (req.headers.authorization === 'Bearer sk_test' ? next() : res.status(401).json({ success: false, error: 'Invalid token' }));
   app.use('/api', auth);
@@ -104,5 +117,5 @@ export function startMock(port = 4010) {
     res.status(202).json(o);
   });
   app.get('/api/games/orders', (req, res) => res.json({ success: true, orders: orders.filter((o) => o.kind === 'game' && (!req.query.order_id || o.external_order_id === req.query.order_id)) }));
-  return new Promise((r) => { const s = app.listen(port, () => { s.boldLinks = boldLinks; r(s); }); });
+  return new Promise((r) => { const s = app.listen(port, () => { s.boldLinks = boldLinks; s.binancePays = binancePays; s.binanceDeps = binanceDeps; r(s); }); });
 }

@@ -13,6 +13,9 @@ process.env.BOLD_API_KEY = 'bold_test';
 process.env.BOLD_SECRET_KEY = 'bold_secret_test';
 process.env.BOLD_BASE_URL = 'http://localhost:4010/bold';
 process.env.BOT_TOKEN = '1:test';
+process.env.BINANCE_API_KEY = 'bnkey_test';
+process.env.BINANCE_API_SECRET = 'bnsecret_test';
+process.env.BINANCE_BASE_URL = 'http://localhost:4010/binance';
 process.chdir(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 rmSync('./data', { recursive: true, force: true });
 
@@ -345,6 +348,67 @@ await test('Bold: recarga en línea se acredita sola (con bono), sin duplicados 
   mock.boldLinks.get(r2.bold_link).status = 'PAID';
   await bot.pollBold();
   assert.equal((await one('SELECT status FROM recharges WHERE id=$1', [r2.id])).status, 'approved');
+  await saveSettings({ cop_rate: '0' });
+});
+
+await test('Binance: el cliente pega el Order ID / TxID y se acredita solo, sin duplicados', async () => {
+  const { createBot } = await import('../src/bot/index.js');
+  await saveSettings({ cop_rate: '4000', recharge_bonus: '100000:3,200000:5', binance_enabled: '1', binance_pay_id: '123456789', binance_trc20: 'TXyzTRC20addr' });
+  const out = [];
+  const bot = createBot();
+  bot.api.config.use(async (prev, method, payload) => {
+    if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Nova Plus', username: 'NovaPlusTestBot' } };
+    if (['sendMessage', 'editMessageText'].includes(method)) out.push({ to: payload.chat_id, text: payload.text, kb: payload.reply_markup?.inline_keyboard || [] });
+    return { ok: true, result: { message_id: 1, date: 0, chat: { id: payload.chat_id || 1, type: 'private' }, text: payload.text } };
+  });
+  await bot.init();
+  const from = { id: 5151, is_bot: false, first_name: 'Leo' };
+  const { query: q } = await import('../src/db.js');
+  await users.upsertUser(from);
+  await q("UPDATE users SET lang='es' WHERE id=5151");
+  let uid = 1000;
+  const chat = { id: 5151, type: 'private' };
+  const tap = (data) => bot.handleUpdate({ update_id: uid++, callback_query: { id: String(uid), from, chat_instance: '1', data, message: { message_id: 5, date: 0, chat, text: 'x' } } });
+  const say = (text) => bot.handleUpdate({ update_id: uid++, message: { message_id: uid, date: 0, chat, from, text, ...(text.startsWith('/') ? { entities: [{ type: 'bot_command', offset: 0, length: text.length }] } : {}) } });
+  // menú de recarga → elegir Binance
+  await say('/recargar');
+  assert.ok(out.at(-1).kb.flat().some((b) => b.callback_data === 'rbn'));
+  await tap('rbn');
+  assert.ok(out.at(-1).text.includes('123456789') && out.at(-1).text.includes('TXyzTRC20addr'));
+  // pago que aún no aparece
+  await say('400000111222333');
+  assert.ok(out.at(-1).text.includes('Aún no encontramos'));
+  // llega el pago de Binance Pay (30 USDT = 120.000 COP → bono 3 %)
+  mock.binancePays.push({ transactionId: '400000111222333', amount: '30', currency: 'USDT', payerInfo: { binanceId: 777 } });
+  const before = (await users.getUser(5151)).balance;
+  await say('400000111222333');
+  const after = (await users.getUser(5151)).balance;
+  assert.equal(pricing.round4(after - before), pricing.round4(30 * 1.03));
+  assert.ok(out.some((m) => m.to === 5151 && m.text.includes('¡Recarga aprobada!')));
+  // el mismo ID otra vez: no acredita
+  await tap('rbn');
+  await say('400000111222333');
+  assert.ok(out.at(-1).text.includes('ya fue usado'));
+  assert.equal((await users.getUser(5151)).balance, after);
+  // un pago enviado (negativo) no cuenta
+  mock.binancePays.push({ transactionId: '500000999', amount: '-10', currency: 'USDT' });
+  await say('500000999');
+  assert.ok(out.at(-1).text.includes('Aún no encontramos'));
+  // otra moneda: no acredita y avisa
+  mock.binancePays.push({ transactionId: '600000555', amount: '0.01', currency: 'BTC' });
+  await say('600000555');
+  assert.ok(out.at(-1).text.includes('BTC'));
+  // depósito TRC20: pendiente y luego confirmado
+  const dep = { txId: 'abc123deftrc20hash', coin: 'USDT', amount: '12', network: 'TRX', status: 0, address: 'TXyz' };
+  mock.binanceDeps.push(dep);
+  await say('abc123deftrc20hash');
+  assert.ok(out.at(-1).text.includes('confirmando'));
+  dep.status = 1;
+  const b2 = (await users.getUser(5151)).balance;
+  await say('abc123deftrc20hash');
+  assert.equal(pricing.round4((await users.getUser(5151)).balance - b2), 12);
+  const rows = await (await import('../src/db.js')).many("SELECT ext_tx FROM recharges WHERE user_id=5151 AND method='binance' AND status='approved'");
+  assert.equal(rows.length, 2);
   await saveSettings({ cop_rate: '0' });
 });
 

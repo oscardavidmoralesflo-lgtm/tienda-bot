@@ -12,6 +12,7 @@ import { levelOf } from '../loyalty.js';
 import { t, localName, userLang, rememberLang, normLang } from '../i18n.js';
 import { MENU, LEGACY, LINE, show, cancelKb, navRow, cut } from './ui.js';
 import { bold, boldEnabled } from '../bold.js';
+import { binanceEnabled, findPayment } from '../binance.js';
 import { registerShop, handleShopText, showStore, showGames, bestSellers, doSearch } from './shop.js';
 
 // "100000:3,200000:5" → % de bono para un monto en pesos
@@ -181,7 +182,89 @@ export function createBot() {
   // ---------- recargas ----------
   // En modo pesos el cliente elige/escribe pesos; el saldo se guarda en USD con la tasa del momento.
   const minCop = () => Math.ceil((num('min_recharge') * copRate()) / 1000) * 1000;
+  // Primero se elige el método: Binance (automático) o pesos (Bre-B/Nequi)
   const startRecharge = async (ctx) => {
+    if (!binanceEnabled()) return startRechargeCop(ctx);
+    await clearState(ctx);
+    const kb = new InlineKeyboard()
+      .text(T(ctx, 'btn_rc_binance'), 'rbn').row()
+      .text(T(ctx, 'btn_rc_cop'), 'rcop').row()
+      .text(T(ctx, 'btn_cancel'), 'x');
+    await show(ctx, T(ctx, 'rc_pick_method', { line: LINE }), kb);
+  };
+  bot.callbackQuery('rcop', (ctx) => startRechargeCop(ctx));
+
+  // ---------- recarga con Binance ----------
+  const showBinance = async (ctx) => {
+    await setState(ctx.from.id, { step: 'binance_wait', tries: 0 });
+    const lines = [];
+    if (s('binance_pay_id')) lines.push(T(ctx, 'bn_pay', { id: esc(s('binance_pay_id')) }));
+    if (s('binance_trc20')) lines.push(T(ctx, 'bn_trc20', { addr: esc(s('binance_trc20')) }));
+    if (s('binance_bep20')) lines.push(T(ctx, 'bn_bep20', { addr: esc(s('binance_bep20')) }));
+    const tiers = bonusTiers();
+    const bonus = tiers.length && copRate()
+      ? T(ctx, 'bn_bonus', { list: tiers.map(([a, p]) => T(ctx, 'rc_bonus_item', { pct: p, amt: `${Math.ceil(a / copRate())} USDT` })).join(' · ') })
+      : '';
+    const text = T(ctx, 'bn_info', { line: LINE, methods: lines.join('\n') || '—', min: money(num('min_recharge')), bonus });
+    const kb = new InlineKeyboard().text(T(ctx, 'btn_bn_help'), 'rbh').row().text(T(ctx, 'btn_cancel'), 'x');
+    await show(ctx, text, kb);
+  };
+  bot.callbackQuery('rbn', showBinance);
+  bot.callbackQuery('rbh', async (ctx) => {
+    await setState(ctx.from.id, { step: 'binance_wait', tries: 0 });
+    await ctx.reply(T(ctx, 'bn_help'), { parse_mode: 'HTML', reply_markup: cancelKb(ctx.lang) });
+  });
+
+  // Verifica el ID enviado por el cliente y acredita al instante
+  const verifyBinance = async (ctx, st, raw) => {
+    const id = String(raw).trim().replace(/^#/, '');
+    if (!/^[A-Za-z0-9_:-]{6,120}$/.test(id)) return ctx.reply(T(ctx, 'bn_bad_id'));
+    if ((st.tries || 0) >= 15) {
+      await setState(ctx.from.id, null);
+      return ctx.reply(T(ctx, 'bn_not_found'), { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text(T(ctx, 'btn_support'), 'sup') });
+    }
+    await setState(ctx.from.id, { step: 'binance_wait', tries: (st.tries || 0) + 1 });
+    if (await one('SELECT id FROM recharges WHERE ext_tx=$1', [id])) return ctx.reply(T(ctx, 'bn_used'));
+    await ctx.reply(T(ctx, 'bn_checking'));
+    let p;
+    try {
+      p = await findPayment(id);
+    } catch (e) {
+      console.error('Binance', e.message);
+      notifyAdmins(`⚠️ Binance no respondió al verificar una recarga: ${esc(e.message)}`);
+      return ctx.reply(T(ctx, 'bn_error'));
+    }
+    if (!p.found) return ctx.reply(T(ctx, 'bn_not_found'), { parse_mode: 'HTML' });
+    if (p.status === 'pending') return ctx.reply(T(ctx, 'bn_pending'));
+    if (p.status === 'not_incoming') return ctx.reply(T(ctx, 'bn_not_found'), { parse_mode: 'HTML' });
+    if (p.status === 'wrong_coin') {
+      notifyAdmins(`⚠️ Pago Binance en ${esc(p.coin)} (${p.amount}) del cliente <code>${ctx.from.id}</code>, ID <code>${esc(id)}</code>. Acredítalo a mano si corresponde.`);
+      return ctx.reply(T(ctx, 'bn_wrong_coin', { amount: p.amount, coin: esc(p.coin) }), { reply_markup: new InlineKeyboard().text(T(ctx, 'btn_support'), 'sup') });
+    }
+    const amount = round4(p.amount);
+    const r = await one(
+      `INSERT INTO recharges (user_id, amount, method, status, ext_tx, handled_by, handled_at)
+       VALUES ($1,$2,'binance','approved',$3,$4,now()) ON CONFLICT DO NOTHING RETURNING *`,
+      [ctx.from.id, amount, id, `binance:${p.kind}`],
+    ).catch(() => null);
+    if (!r) return ctx.reply(T(ctx, 'bn_used'));
+    await setState(ctx.from.id, null);
+    let bal = await credit(ctx.from.id, amount, 'recharge', `Binance #${r.id} (${p.coin})`);
+    const pct = copRate() ? rechargeBonusPct(amount * copRate()) : 0;
+    let bonusTxt = '';
+    if (pct > 0) {
+      const b = round4((amount * pct) / 100);
+      bal = await credit(ctx.from.id, b, 'bonus', `Bono ${pct}% recarga #${r.id}`);
+      bonusTxt = T(ctx, 'rc_approved_bonus', { amt: fmt(b) });
+    }
+    await ctx.reply(T(ctx, 'rc_approved', { line: LINE, amt: fmt(amount), bonus: bonusTxt, bal: fmt(bal) }), {
+      parse_mode: 'HTML',
+      reply_markup: new InlineKeyboard().text(T(ctx, 'btn_go_store'), 'st').text(T(ctx, 'btn_top'), 'top'),
+    });
+    notifyAdmins(`🟡 <b>Recarga Binance automática #${r.id}</b>\nCliente: ${esc(ctx.from.first_name || '')} (<code>${ctx.from.id}</code>)\n+${money(amount)} ${esc(p.coin)}${pct ? ` + bono ${pct}%` : ''} · ${esc(p.kind)}`);
+  };
+
+  const startRechargeCop = async (ctx) => {
     await setState(ctx.from.id, { step: 'recharge_amount' });
     const qr = s('payment_qr');
     if (qr) ctx.replyWithPhoto(qr, { caption: T(ctx, 'qr_caption') }).catch(() => {});
@@ -523,6 +606,7 @@ export function createBot() {
       return askProof(ctx, amount);
     }
     if (st?.step === 'recharge_proof') return ctx.reply(T(ctx, 'rc_send_photo'));
+    if (st?.step === 'binance_wait') return verifyBinance(ctx, st, text);
     if (await handleShopText(ctx, st, text)) return;
     // cualquier otro texto = búsqueda rápida
     if (text.length >= 2 && !text.startsWith('/')) return doSearch(ctx, text);

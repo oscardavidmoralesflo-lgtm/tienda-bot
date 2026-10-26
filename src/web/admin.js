@@ -198,7 +198,7 @@ export function adminRouter(bot) {
       <div class="sec-title">Historial</div>
       <div class="card"><div class="tablewrap"><table><thead><tr><th>#</th><th>Cliente</th><th class="r">Monto</th><th>Estado</th><th>Aprobada por</th><th>Fecha</th></tr></thead><tbody>
       ${done.map((x) => `<tr><td class="muted">#${x.id}</td><td><a href="/admin/users/${x.user_id}">${who(x, x.user_id)}</a></td><td class="r num"><b>${money(x.amount)}</b></td>
-        <td>${x.status === 'approved' ? '<span class="badge b-ok">Aprobada</span>' : x.status === 'link' ? '<span class="badge b-info">Esperando pago en línea</span>' : x.status === 'expired' ? '<span class="badge b-muted">Link vencido</span>' : x.status === 'failed' ? '<span class="badge b-bad">Error al crear link</span>' : '<span class="badge b-bad">Rechazada</span>'} ${x.method === 'bold' ? '<span class="badge b-brand">⚡ Bold</span>' : ''}${x.amount_cop ? ` <span class="muted">${Number(x.amount_cop).toLocaleString('es-CO')}</span>` : ''}</td><td class="muted">${esc(x.handled_by || '')}</td><td class="muted">${fmtDate(x.handled_at)}</td></tr>`).join('') || `<tr><td colspan="6">${emptyBox('🧾', 'Aún no hay historial')}</td></tr>`}
+        <td>${x.status === 'approved' ? '<span class="badge b-ok">Aprobada</span>' : x.status === 'link' ? '<span class="badge b-info">Esperando pago en línea</span>' : x.status === 'expired' ? '<span class="badge b-muted">Link vencido</span>' : x.status === 'failed' ? '<span class="badge b-bad">Error al crear link</span>' : '<span class="badge b-bad">Rechazada</span>'} ${x.method === 'bold' ? '<span class="badge b-brand">⚡ Bold</span>' : x.method === 'binance' ? '<span class="badge b-warn">🟡 Binance</span>' : ''}${x.ext_tx ? ` <span class="muted" style="font-size:11px">${esc(String(x.ext_tx).slice(0, 18))}…</span>` : ''}${x.amount_cop ? ` <span class="muted">${Number(x.amount_cop).toLocaleString('es-CO')}</span>` : ''}</td><td class="muted">${esc(x.handled_by || '')}</td><td class="muted">${fmtDate(x.handled_at)}</td></tr>`).join('') || `<tr><td colspan="6">${emptyBox('🧾', 'Aún no hay historial')}</td></tr>`}
       </tbody></table></div></div>`;
     await render(req, res, 'Recargas', body, { subtitle: 'Revisa el comprobante, corrige el monto si hace falta y aprueba con un clic. El cliente recibe el aviso al instante.' });
   });
@@ -556,6 +556,12 @@ export function adminRouter(bot) {
       ['min_recharge', 'Recarga mínima (USD)', 'number', 'En pesos se redondea a miles. Ej: 3 USD ≈ $10.000.'],
       ['currency', 'Moneda interna', 'text'],
     ]],
+    ['binance', 'wallet', 'Recargas automáticas con Binance (USDT)', 'El cliente paga y envía el Order ID o TxID; el bot lo verifica y acredita solo', [
+      ['binance_enabled', 'Activar Binance (1 = sí, 0 = no)', 'text', 'Requiere BINANCE_API_KEY y BINANCE_API_SECRET (llave de SOLO LECTURA) en el servidor.'],
+      ['binance_pay_id', 'Tu Binance Pay ID', 'text', 'En la app: Perfil → Binance Pay (número).'],
+      ['binance_trc20', 'Tu dirección USDT TRC20 (opcional)', 'text', 'Billetera → Depositar → USDT → red TRC20.'],
+      ['binance_bep20', 'Tu dirección USDT BEP20/BSC (opcional)', 'text'],
+    ]],
     ['bold', 'bolt', 'Recargas automáticas (Bold)', 'PSE, Nequi y Botón Bancolombia se acreditan solos', [
       ['bold_enabled', 'Activar pagos en línea (1 = sí, 0 = no)', 'text', 'Requiere BOLD_API_KEY y BOLD_SECRET_KEY en el servidor.'],
       ['bold_surcharge', 'Comisión que paga el cliente en línea (%)', 'number', 'Cubre lo que cobra Bold para que no se coma tu ganancia. La transferencia manual sigue sin comisión. 0 = la asumes tú.'],
@@ -583,6 +589,7 @@ export function adminRouter(bot) {
         <div class="card"><h3>${icon('link')} Conexiones</h3><p class="sub">Proveedores y Telegram</p>
           <div class="grid" style="gap:10px">
           <div class="split"><span>🏦 API KOKORO</span>${config.kokoroToken ? '<span class="badge b-ok">Conectada</span>' : '<span class="badge b-bad">Falta token</span>'}</div>
+          <div class="split"><span>🟡 Binance (recargas USDT)</span>${config.binanceKey && config.binanceSecret ? '<span class="badge b-ok">Conectado</span>' : '<span class="badge b-warn">Sin llaves</span>'}</div>
           <div class="split"><span>⚡ Bold (pagos en línea)</span>${config.boldApiKey && config.boldSecretKey ? '<span class="badge b-ok">Conectado</span>' : '<span class="badge b-warn">Sin llaves</span>'}</div>
           <div class="split"><span>🐰 API Bunny</span>${bunnyEnabled() ? '<span class="badge b-ok">Conectada</span>' : '<span class="badge b-warn">Sin API key</span>'}</div>
           <div class="split"><span>🤖 Bot</span><a href="https://t.me/${esc(bot.botInfo?.username || '')}" target="_blank">@${esc(bot.botInfo?.username || '')}</a></div>
