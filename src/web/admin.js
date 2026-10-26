@@ -126,7 +126,7 @@ export function adminRouter(bot) {
     // ventas por categoría (30 días)
     const byCat = {};
     for (const t of top) byCat[categoryOf(t.product_name).label] = (byCat[categoryOf(t.product_name).label] || 0) + Number(t.revenue);
-    const colors = ['#14b88c', '#e9a23b', '#2f80ed', '#0b7c8c', '#e5484d', '#7c3aed', '#94a3b8'];
+    const colors = ['#d4af62', '#10b981', '#5b7fa6', '#a97f33', '#8a8f9c', '#c26a5a', '#6b4e71'];
     const parts = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([label, value], i) => ({ label, value, color: colors[i % colors.length] }));
     const maxTop = Math.max(1, ...top.map((t) => t.n));
 
@@ -140,7 +140,7 @@ export function adminRouter(bot) {
 
       <div class="grid g21" style="margin-top:16px">
         <div class="card"><div class="split"><div><h3>${icon('trend')} Ventas de los últimos 14 días</h3><p class="sub">Facturación y ganancia diaria en ${cur()}</p></div>
-          <div class="legend"><span><i style="background:#14b88c"></i>Facturado</span><span><i style="background:#e9a23b"></i>Ganancia</span></div></div>
+          <div class="legend"><span><i style="background:#d4af62"></i>Facturado</span><span><i style="background:#10b981"></i>Ganancia</span></div></div>
           ${salesChart(series)}</div>
         <div class="card"><h3>${icon('wallet')} Saldos con proveedores</h3><p class="sub">Lo que tienes disponible para vender</p>
           <div class="grid" style="gap:12px">

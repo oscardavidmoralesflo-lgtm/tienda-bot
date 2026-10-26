@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400">
+  <!-- CLAVIS · logotipo horizontal (símbolo + nombre) -->
+  <defs>
+    <linearGradient id="gold" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#F1DFAE"/>
+      <stop offset="0.45" stop-color="#D4AF62"/>
+      <stop offset="1" stop-color="#A97F33"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="#0B0F15"/>
+  <g transform="translate(70 70) scale(0.5078)">
+    <path d="M 368.6 161.5 A 148 148 0 1 0 368.6 350.5" fill="none" stroke="url(#gold)" stroke-width="54"/>
+    <path d="M 256 194 A 38 38 0 0 1 276.5 264 L 286 330 Q 287 338 279 338 L 233 338 Q 225 338 226 330 L 235.5 264 A 38 38 0 0 1 256 194 Z" fill="url(#gold)"/>
+  </g>
+  <text x="400" y="222" font-family="Segoe UI, Montserrat, Arial, sans-serif" font-weight="600" font-size="128" letter-spacing="30" fill="#F5F1E8">CLAVIS</text>
+  <rect x="404" y="252" width="56" height="3" fill="url(#gold)"/>
+  <text x="476" y="262" font-family="Segoe UI, Montserrat, Arial, sans-serif" font-weight="500" font-size="26" letter-spacing="9" fill="#D4AF62">ACCESO PREMIUM</text>
+</svg>

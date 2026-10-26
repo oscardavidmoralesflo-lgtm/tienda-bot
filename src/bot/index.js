@@ -400,11 +400,11 @@ export async function setupCommands(bot) {
     { command: 'cancelar', description: '❌ Cancelar la operación actual' },
   ]);
   // Nombre y descripción que ven los clientes antes de pulsar "Iniciar"
-  await bot.api.setMyName(`${s('shop_name')} 🔑`).catch(() => {});
+  await bot.api.setMyName(`${s('shop_name')} | Acceso Premium`).catch(() => {});
   await bot.api.setMyDescription(
-    `🔑 ${s('shop_name')} — todas tus suscripciones premium en un solo lugar.\n\n` +
-      '🤖 ChatGPT, Gemini, Claude · 🎬 Netflix, YouTube, Spotify · 🎨 Canva, CapCut · 💼 Office · 🎮 Recargas de juegos\n\n' +
-      '💵 Precios en pesos colombianos\n⚡ Entrega automática al instante 24/7\n🎁 Ñapa: te devolvemos saldo en cada compra\n⏰ Te avisamos antes de que venza tu suscripción\n🛡 Garantía y soporte en español',
+    `${s('shop_name').toUpperCase()} — Acceso premium\n\n` +
+      'Inteligencia artificial, streaming, diseño y software original, en pesos colombianos.\n\n' +
+      '• Entrega automática e inmediata, 24/7\n• Garantía y soporte en español\n• Recompensas en saldo en cada compra\n• Aviso antes de que venza tu suscripción',
   ).catch(() => {});
-  await bot.api.setMyShortDescription(`🔑 ${s('shop_name')}: IA, streaming y apps premium en pesos, con entrega al instante y ñapa en cada compra.`).catch(() => {});
+  await bot.api.setMyShortDescription(`${s('shop_name')} — IA, streaming y software premium en pesos. Entrega inmediata y garantía.`).catch(() => {});
 }

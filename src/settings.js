@@ -2,7 +2,7 @@ import { many, query } from './db.js';
 
 // Valores por defecto. Todo se puede cambiar desde el panel de admin (Ajustes).
 export const DEFAULTS = {
-  shop_name: 'Llavero',
+  shop_name: 'Clavis',
   currency: 'USDT',
   markup_products: '20',   // % general (solo si no hay tramos)
   markup_games: '15',
@@ -23,9 +23,9 @@ export const DEFAULTS = {
   low_balance_alert: '10', // te avisa cuando tu saldo en KOKORO baje de esto
   maintenance: '0',
   welcome_text:
-    '🔑 <b>{shop}</b> · todas tus suscripciones premium en un solo lugar\n' +
-    '¡Hola {name}! 👋\n' +
-    '⚡ Entrega al instante · 🛡 Garantía · 🎁 Ñapa en cada compra',
+    '<b>{shop}</b> — Acceso premium\n' +
+    'Hola {name}, bienvenido.\n' +
+    'IA, streaming y software premium en pesos, con entrega inmediata y garantía.',
   channel_url: '', // enlace a tu canal de Telegram (https://t.me/...) para el botón 📢 Canal
   payment_instructions:
     '💳 <b>Métodos de pago</b> (sin comisión)\n\n' +

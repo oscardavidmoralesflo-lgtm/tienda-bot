@@ -55,30 +55,30 @@ const FONT = '<link rel="preconnect" href="https://fonts.googleapis.com"><link r
 
 const CSS = `
 :root{
-  --bg:#f2f7f6;--bg2:#e8f1ef;--surface:#ffffff;--surface2:#f6faf9;--border:#dfe9e6;--border2:#cbdcd7;
-  --text:#0b1b19;--text2:#45605b;--muted:#7f9893;
-  --brand:#0b9a7e;--brand2:#0b7c8c;--brand-soft:rgba(11,154,126,.11);--gold:#e9a23b;--gold-soft:rgba(233,162,59,.14);
+  --bg:#f6f4ef;--bg2:#eeeae1;--surface:#ffffff;--surface2:#faf8f3;--border:#e7e2d6;--border2:#d8d0bf;
+  --text:#11151c;--text2:#4a5160;--muted:#8a8f9c;
+  --brand:#9a7424;--brand2:#7d5c18;--brand-soft:rgba(180,140,60,.13);--gold:#c9a24d;--gold-soft:rgba(201,162,77,.15);--on-brand:#15110a;
   --ok:#0ea971;--ok-soft:rgba(14,169,113,.11);--bad:#e5484d;--bad-soft:rgba(229,72,77,.11);
   --warn:#d98a04;--warn-soft:rgba(217,138,4,.13);--info:#2f80ed;--info-soft:rgba(47,128,237,.11);
   --shadow:0 1px 2px rgba(16,20,45,.04),0 8px 24px -12px rgba(16,20,45,.12);
-  --radius:16px;--grad:linear-gradient(135deg,#16c98f 0%,#0b9a8a 55%,#065a6b 100%);
+  --radius:14px;--grad:linear-gradient(135deg,#efdcaa 0%,#d4af62 48%,#a97f33 100%);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --bg:#06110f;--bg2:#091815;--surface:#0c1c19;--surface2:#10241f;--border:#19352f;--border2:#22463e;
-  --text:#ecf7f4;--text2:#a9c5be;--muted:#6f8f88;--brand:#19c99a;--brand-soft:rgba(25,201,154,.14);--gold-soft:rgba(240,180,70,.15);
+  --bg:#07090d;--bg2:#0b0e14;--surface:#0f131a;--surface2:#141922;--border:#1f2632;--border2:#2a3342;
+  --text:#f3efe6;--text2:#b9b4a8;--muted:#7d7a72;--brand:#dcbb72;--brand-soft:rgba(212,175,98,.13);--gold-soft:rgba(212,175,98,.15);
   --ok-soft:rgba(20,200,135,.14);--bad-soft:rgba(240,90,95,.15);--warn-soft:rgba(245,170,30,.15);--info-soft:rgba(70,150,255,.15);
   --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px -15px rgba(0,0,0,.6);
 }}
 :root[data-theme=dark]{
-  --bg:#06110f;--bg2:#091815;--surface:#0c1c19;--surface2:#10241f;--border:#19352f;--border2:#22463e;
-  --text:#ecf7f4;--text2:#a9c5be;--muted:#6f8f88;--brand:#19c99a;--brand-soft:rgba(25,201,154,.14);--gold-soft:rgba(240,180,70,.15);
+  --bg:#07090d;--bg2:#0b0e14;--surface:#0f131a;--surface2:#141922;--border:#1f2632;--border2:#2a3342;
+  --text:#f3efe6;--text2:#b9b4a8;--muted:#7d7a72;--brand:#dcbb72;--brand-soft:rgba(212,175,98,.13);--gold-soft:rgba(212,175,98,.15);
   --ok-soft:rgba(20,200,135,.14);--bad-soft:rgba(240,90,95,.15);--warn-soft:rgba(245,170,30,.15);--info-soft:rgba(70,150,255,.15);
   --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px -15px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased}
-body:before{content:"";position:fixed;inset:-20% -10% auto auto;width:720px;height:720px;background:radial-gradient(closest-side,rgba(22,201,143,.12),transparent);pointer-events:none;z-index:0}
+body:before{content:"";position:fixed;inset:-20% -10% auto auto;width:720px;height:720px;background:radial-gradient(closest-side,rgba(212,175,98,.08),transparent);pointer-events:none;z-index:0}
 a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
 .ic{flex:none;vertical-align:-3px}
 .num{font-variant-numeric:tabular-nums}
@@ -86,12 +86,12 @@ a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
 .app{display:grid;grid-template-columns:256px 1fr;min-height:100vh;position:relative;z-index:1}
 .side{position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--border);background:color-mix(in oklab,var(--surface) 72%,transparent);backdrop-filter:blur(14px);display:flex;flex-direction:column;gap:6px;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:11px;padding:4px 8px 18px}
-.logo{width:38px;height:38px;border-radius:12px;background:var(--grad);display:grid;place-items:center;color:#fff;box-shadow:0 8px 20px -8px rgba(11,154,126,.8);overflow:hidden}
+.logo{width:38px;height:38px;border-radius:11px;background:#0b0e14;display:grid;place-items:center;color:#fff;box-shadow:0 8px 22px -10px rgba(0,0,0,.55);overflow:hidden}
 .brand b{display:block;font-size:15px;letter-spacing:-.01em}.brand small{color:var(--muted);font-size:12px}
 .navsec{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 10px 6px}
 .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;color:var(--text2);font-weight:500;text-decoration:none;transition:background .15s,color .15s}
 .nav a:hover{background:var(--surface2);color:var(--text)}
-.nav a.on{background:var(--brand-soft);color:var(--brand)}
+.nav a.on{background:var(--brand-soft);color:var(--brand);box-shadow:inset 2px 0 0 var(--gold)}
 .nav a.on .ic{color:var(--brand)}
 .nav .badge{margin-left:auto}
 .side .foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
@@ -116,10 +116,10 @@ a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
 .stat .k{color:var(--text2);font-size:13px;font-weight:500}
 .stat .v{font-size:26px;font-weight:750;letter-spacing:-.02em;line-height:1.1}
 .stat .d{font-size:12px;color:var(--muted)}
-.stat.hero{background:var(--grad);border:0;color:#fff}
-.stat.hero .k,.stat.hero .d{color:rgba(255,255,255,.82)}
-.stat.hero .chip{background:rgba(255,255,255,.18);color:#fff}
-.stat.hero:after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.10)}
+.stat.hero{background:linear-gradient(135deg,#141a23 0%,#0b0e14 100%);border:1px solid rgba(212,175,98,.35);color:#f3efe6}
+.stat.hero .k,.stat.hero .d{color:rgba(243,239,230,.72)}.stat.hero .v{color:#e7cd8c}
+.stat.hero .chip{background:rgba(212,175,98,.16);color:#e7cd8c}
+.stat.hero:after{content:"";position:absolute;right:-50px;top:-50px;width:170px;height:170px;border-radius:50%;border:26px solid rgba(212,175,98,.07)}
 .c-brand{background:var(--brand-soft);color:var(--brand)}.c-ok{background:var(--ok-soft);color:var(--ok)}.c-bad{background:var(--bad-soft);color:var(--bad)}.c-warn{background:var(--warn-soft);color:var(--warn)}.c-info{background:var(--info-soft);color:var(--info)}
 .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.muted{color:var(--muted)}
 .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
@@ -143,7 +143,7 @@ input,select,textarea{font:inherit;color:var(--text);background:var(--surface2);
 input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-soft)}
 textarea{width:100%;min-height:120px;resize:vertical}
 .in-sm{width:84px;padding:7px 10px}
-.btn,button{font:inherit;font-weight:600;border:0;border-radius:11px;padding:9px 15px;background:var(--grad);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;box-shadow:0 6px 16px -8px rgba(11,154,126,.75);transition:transform .08s,filter .15s}
+.btn,button{font:inherit;font-weight:600;border:0;border-radius:11px;padding:9px 15px;background:var(--grad);color:var(--on-brand,#15110a);cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;box-shadow:0 6px 16px -8px rgba(169,127,51,.7);transition:transform .08s,filter .15s}
 .btn:hover,button:hover{filter:brightness(1.07);text-decoration:none}.btn:active,button:active{transform:translateY(1px)}
 .btn.ghost,button.ghost{background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none}
 .btn.ghost:hover,button.ghost:hover{background:var(--surface2)}
@@ -208,9 +208,9 @@ const JS = `
 
 // Logo de la marca (llave con argolla dorada) para la barra lateral y el login
 let logoSeq = 0;
-export const logoMark = (size = 38, k = ++logoSeq) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="lgbg${k}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16C98F"/><stop offset=".55" stop-color="#0B9A8A"/><stop offset="1" stop-color="#065A6B"/></linearGradient><linearGradient id="lggd${k}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE7A3"/><stop offset=".5" stop-color="#F7BE45"/><stop offset="1" stop-color="#E0921A"/></linearGradient></defs><rect width="512" height="512" rx="116" fill="url(#lgbg${k})"/><g transform="translate(256 258) scale(0.9) translate(-242 -237)"><circle cx="138" cy="132" r="50" fill="none" stroke="url(#lggd${k})" stroke-width="16"/><g stroke="#fff" stroke-linecap="round" fill="none"><circle cx="212" cy="208" r="76" stroke-width="42"/><path d="M266 262 L384 380" stroke-width="42"/><path d="M326 322 L356 292" stroke-width="34"/><path d="M366 362 L396 332" stroke-width="34"/></g><path d="M212 168 C217 196 224 203 252 208 C224 213 217 220 212 248 C207 220 200 213 172 208 C200 203 207 196 212 168 Z" fill="url(#lggd${k})"/></g></svg>`;
+export const logoMark = (size = 38, k = ++logoSeq) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="cxo${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#18202B"/><stop offset="1" stop-color="#0A0E14"/></linearGradient><linearGradient id="cxg${k}" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#F1DFAE"/><stop offset=".45" stop-color="#D4AF62"/><stop offset="1" stop-color="#A97F33"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#cxo${k})"/><rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#D4AF62" stroke-opacity=".22" stroke-width="3"/><path d="M 368.6 161.5 A 148 148 0 1 0 368.6 350.5" fill="none" stroke="url(#cxg${k})" stroke-width="54"/><path d="M 256 194 A 38 38 0 0 1 276.5 264 L 286 330 Q 287 338 279 338 L 233 338 Q 225 338 226 330 L 235.5 264 A 38 38 0 0 1 256 194 Z" fill="url(#cxg${k})"/></svg>`;
 
-const AV_COLORS = ['#0b9a7e', '#e9a23b', '#2f80ed', '#e5484d', '#0891b2', '#7c3aed', '#d98a04', '#059669'];
+const AV_COLORS = ['#a97f33', '#2f6f8f', '#7a5c3e', '#3b4a6b', '#8a6d2f', '#4b6358', '#6b4e71', '#5c6b7a'];
 export function avatar(name, id) {
   const n = String(name || '?').trim();
   const initials = (n.split(/\s+/).slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
@@ -224,12 +224,12 @@ function shell(title, inner, { flash = '', path = '', badges = {}, shop = 'Panel
     const b = badgeKey && badges[badgeKey] ? `<span class="badge ${badgeKey === 'recharges' ? 'b-warn' : 'b-brand'}">${badges[badgeKey]}</span>` : '';
     return `<a href="${href}" class="${on ? 'on' : ''}">${icon(ic)}<span>${label}</span>${b}</a>`;
   }).join('')}</nav>`).join('');
-  const brand = () => `<div class="brand"><div class="logo" style="background:none;box-shadow:0 8px 20px -8px rgba(11,154,126,.8)">${logoMark(38)}</div><div><b>${esc(shop)}</b><small>Tu tienda premium · panel</small></div></div>`;
+  const brand = () => `<div class="brand"><div class="logo" style="background:none">${logoMark(38)}</div><div><b>${esc(shop)}</b><small>Acceso premium · panel</small></div></div>`;
   const toast = flash
     ? `<div class="toast" role="status"><span class="chip ${/error|inválid|no se pudo|falt/i.test(flash) ? 'c-bad' : 'c-ok'}">${icon(/error|inválid|no se pudo|falt/i.test(flash) ? 'x' : 'check', 16)}</span><span>${esc(flash)}</span></div>`
     : '';
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} · ${esc(shop)}</title><meta name="theme-color" content="#0b9a7e">${FONT}<style>${CSS}</style><script>${JS}</script></head><body>
+<title>${esc(title)} · ${esc(shop)}</title><meta name="theme-color" content="#0b0e14">${FONT}<style>${CSS}</style><script>${JS}</script></head><body>
 <div class="mobilebar">${brand()}<button class="ghost sm" data-nav onclick="toggleNav()" aria-label="Menú">${icon('menu')}</button></div>
 <div class="app"><aside class="side">${brand()}${nav}
 <div class="foot"><div class="status"><span class="dot ${maintenance ? 'warn' : ''}"></span>${maintenance ? 'Bot en mantenimiento' : 'Bot en línea · precios cada 3 min'}</div>
@@ -244,7 +244,7 @@ export function page(title, body, opts = {}) {
   return shell(title, head + body, opts);
 }
 
-export function loginPage(error = '', shop = 'Llavero') {
+export function loginPage(error = '', shop = 'Clavis') {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Entrar · ${esc(shop)}</title>${FONT}<style>${CSS}
 .login{min-height:100vh;display:grid;place-items:center;padding:20px;position:relative;z-index:1}
@@ -277,12 +277,12 @@ export function salesChart(series) {
   }).join('');
   const labels = series.map((d, i) => (i % 2 === series.length % 2 || i === series.length - 1)
     ? `<text x="${x(i)}" y="${H - 9}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.label}</text>` : '').join('');
-  const dots = series.map((d, i) => `<circle cx="${x(i)}" cy="${y(d.revenue)}" r="3.2" fill="var(--surface)" stroke="#14b88c" stroke-width="2"><title>${d.label}: ${d.revenue.toFixed(2)} facturado · ${d.profit.toFixed(2)} ganancia · ${d.orders} ventas</title></circle>`).join('');
+  const dots = series.map((d, i) => `<circle cx="${x(i)}" cy="${y(d.revenue)}" r="3.2" fill="var(--surface)" stroke="#d4af62" stroke-width="2"><title>${d.label}: ${d.revenue.toFixed(2)} facturado · ${d.profit.toFixed(2)} ganancia · ${d.orders} ventas</title></circle>`).join('');
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ventas de los últimos ${series.length} días">
-<defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#14b88c" stop-opacity=".35"/><stop offset="1" stop-color="#14b88c" stop-opacity="0"/></linearGradient>
-<linearGradient id="gp" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e9a23b" stop-opacity=".30"/><stop offset="1" stop-color="#e9a23b" stop-opacity="0"/></linearGradient></defs>
-${ticks}<path d="${area('revenue')}" fill="url(#gr)"/><path d="${line('revenue')}" fill="none" stroke="#14b88c" stroke-width="2.5" stroke-linejoin="round"/>
-<path d="${area('profit')}" fill="url(#gp)"/><path d="${line('profit')}" fill="none" stroke="#e9a23b" stroke-width="2.2" stroke-linejoin="round"/>${dots}${labels}</svg>`;
+<defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d4af62" stop-opacity=".35"/><stop offset="1" stop-color="#d4af62" stop-opacity="0"/></linearGradient>
+<linearGradient id="gp" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#10b981" stop-opacity=".30"/><stop offset="1" stop-color="#10b981" stop-opacity="0"/></linearGradient></defs>
+${ticks}<path d="${area('revenue')}" fill="url(#gr)"/><path d="${line('revenue')}" fill="none" stroke="#d4af62" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="${area('profit')}" fill="url(#gp)"/><path d="${line('profit')}" fill="none" stroke="#10b981" stroke-width="2.2" stroke-linejoin="round"/>${dots}${labels}</svg>`;
 }
 
 // Dona por categoría

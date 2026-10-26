@@ -30,7 +30,7 @@ const screens = [];
 let msgId = 100;
 const bot = createBot();
 bot.api.config.use(async (prev, method, payload) => {
-  if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Llavero', username: 'MiTiendaDigital2847_bot' } };
+  if (method === 'getMe') return { ok: true, result: { id: 1, is_bot: true, first_name: 'Clavis', username: 'MiTiendaDigital2847_bot' } };
   if (['sendMessage', 'editMessageText', 'sendPhoto'].includes(method)) {
     screens.push({ method, text: payload.text || payload.caption || '', kb: payload.reply_markup?.inline_keyboard || [] });
     return { ok: true, result: { message_id: ++msgId, date: 0, chat: { id: 7, type: 'private' }, text: payload.text } };
