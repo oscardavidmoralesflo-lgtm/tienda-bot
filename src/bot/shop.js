@@ -2,15 +2,16 @@
 import { InlineKeyboard } from 'grammy';
 import { kokoro } from '../kokoro.js';
 import * as catalog from '../catalog.js';
-import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, money, copSuffix } from '../pricing.js';
+import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, getOverride, money, copSuffix } from '../pricing.js';
 import { s } from '../settings.js';
 import { getUser, setState } from '../users.js';
 import { buyProduct, buyGamePack, refreshOrder, askForCode, formatDelivery, sendConfirmationCode } from '../orders.js';
-import { one } from '../db.js';
+import { one, many } from '../db.js';
 import { esc, tgHtml, ref, deref, errorEs } from '../util.js';
-import { show, pager, cut, cancelKb, MENU } from './ui.js';
+import { DISPLAY_ORDER, CAT_BY_KEY, categoryOf, iconOf } from '../categories.js';
+import { show, pager, cut, cancelKb, navRow, stockIcon, LINE, MENU } from './ui.js';
 
-const PER_PAGE = 10;
+const PER_PAGE = 8;
 const cur = () => s('currency');
 
 // ===================== PRODUCTOS =====================
@@ -21,16 +22,64 @@ async function visibleProducts() {
     .sort((a, b) => (b.stock > 0) - (a.stock > 0) || a.name.localeCompare(b.name));
 }
 
-export async function showProducts(ctx, page = 0) {
+// Tienda: categorías con cantidad de productos
+export async function showStore(ctx) {
   const list = await visibleProducts();
-  if (!list.length) return show(ctx, '😕 No hay productos disponibles en este momento.');
+  const count = {};
+  for (const p of list) if (p.stock > 0) count[categoryOf(p.name).key] = (count[categoryOf(p.name).key] || 0) + 1;
+  const kb = new InlineKeyboard();
+  const cats = DISPLAY_ORDER.filter((c) => count[c.key]);
+  cats.forEach((c, i) => {
+    kb.text(`${c.icon} ${c.label} (${count[c.key]})`, `c:${c.key}:0`);
+    if (i % 2 === 1) kb.row();
+  });
+  kb.row().text('🔥 Más vendidos', 'top').text('🔎 Buscar', 'gs');
+  navRow(kb);
+  const total = Object.values(count).reduce((a, b) => a + b, 0);
+  await show(ctx, `🛍 <b>Tienda</b>\n${LINE}\n${total} productos disponibles con <b>entrega automática</b> ⚡\n\nElige una categoría:`, kb);
+}
+// compatibilidad con botones viejos
+export const showProducts = (ctx) => showStore(ctx);
+
+async function showCategory(ctx, key, page = 0) {
+  const cat = CAT_BY_KEY[key] || CAT_BY_KEY.other;
+  const list = (await visibleProducts()).filter((p) => categoryOf(p.name).key === cat.key);
   const kb = new InlineKeyboard();
   for (const p of list.slice(page * PER_PAGE, (page + 1) * PER_PAGE)) {
-    const label = `${p.emoji_base ? p.emoji_base + ' ' : ''}${cut(p.name, 38)} · $${money(productUnitPrice(p))}${p.stock > 0 ? '' : ' ❌'}`;
-    kb.text(label, `p:${ref(p.id)}`).row();
+    kb.text(`${iconOf(p.name)} ${cut(p.name, 34)} · $${money(productUnitPrice(p))}${p.stock > 0 ? '' : ' · agotado'}`, `p:${ref(p.id)}`).row();
   }
-  pager(kb, 'pl:', page, list.length, PER_PAGE);
-  await show(ctx, `🛍 <b>Productos</b> (${list.length})\nElige un producto para ver detalles y precio:`, kb);
+  pager(kb, `c:${cat.key}:`, page, list.length, PER_PAGE);
+  navRow(kb, 'st');
+  const avail = list.filter((p) => p.stock > 0).length;
+  await show(ctx, `${cat.icon} <b>${cat.label}</b>\n${LINE}\n🟢 ${avail} disponibles · precios en ${cur()}\n\nToca un producto para ver detalles:`, kb);
+}
+
+// Más vendidos: ventas reales de los últimos 30 días; si aún no hay, los destacados y los populares
+export async function bestSellers(limit = 5) {
+  const list = await visibleProducts();
+  const inStock = list.filter((p) => p.stock > 0);
+  const byName = new Map(inStock.map((p) => [p.name, p]));
+  const picked = [];
+  const add = (p) => p && !picked.includes(p) && picked.length < limit && picked.push(p);
+  const sold = await many(
+    `SELECT product_name, count(*)::int AS n FROM orders WHERE status='delivered' AND kind <> 'game'
+     AND created_at > now() - interval '30 days' GROUP BY product_name ORDER BY n DESC LIMIT 20`,
+  ).catch(() => []);
+  for (const r of sold) add(byName.get(r.product_name));
+  for (const p of inStock) if (getOverride(p.id)?.featured) add(p);
+  // populares por defecto (mientras no haya ventas reales)
+  for (const re of [/^gemini ai pro 18/i, /^chatgpt plus 1 mes/i, /^capcut pro team/i, /^canva pro edu/i, /^youtube premium 3/i, /^spotify premium 3/i, /^prime video 6/i, /^netflix/i]) {
+    add(inStock.find((p) => re.test(p.name)));
+  }
+  return picked;
+}
+
+async function showTop(ctx) {
+  const top = await bestSellers(10);
+  const kb = new InlineKeyboard();
+  top.forEach((p, i) => kb.text(`${['🥇', '🥈', '🥉'][i] || '⭐'} ${cut(p.name, 34)} · $${money(productUnitPrice(p))}`, `p:${ref(p.id)}`).row());
+  navRow(kb, 'st');
+  await show(ctx, `🔥 <b>Más vendidos</b>\n${LINE}\nLo que más están comprando nuestros clientes:`, kb);
 }
 
 async function findProduct(key, fresh = false) {
@@ -43,26 +92,35 @@ async function findProduct(key, fresh = false) {
 
 async function showProduct(ctx, key) {
   const p = await findProduct(key);
-  if (!p) return show(ctx, '⚠️ Este producto ya no está disponible. Abre de nuevo el catálogo.');
+  if (!p) return show(ctx, '⚠️ Este producto ya no está disponible.', navRow(new InlineKeyboard(), 'st'));
+  const cat = categoryOf(p.name);
   const unit = productUnitPrice(p);
-  let text = `${p.emoji_base || '🛍'} <b>${esc(p.name)}</b>\n\n💵 Precio: <b>${money(unit)} ${cur()}</b>${copSuffix(unit)}\n📦 Stock: ${p.stock > 0 ? p.stock : 'agotado'}`;
+  let text = `${iconOf(p.name)} <b>${esc(p.name)}</b>\n${LINE}\n`;
+  text += `💵 Precio: <b>${money(unit)} ${cur()}</b>${copSuffix(unit)}\n`;
+  text += `📦 Disponibles: ${stockIcon(p.stock)} ${p.stock > 0 ? (p.stock >= 999 ? 'ilimitado' : p.stock) : 'agotado'}\n`;
+  text += '⚡ Entrega: automática al instante\n';
+  text += `🗂 Categoría: ${cat.icon} ${cat.label}`;
   if (p.min_order > 1) text += `\n🔢 Compra mínima: ${p.min_order}`;
   const tiers = (p.bulk_discounts || []).filter((t) => t.min_qty > 1);
   if (tiers.length) {
-    text += '\n\n🏷 <b>Descuento por volumen</b>';
+    text += `\n\n🏷 <b>Descuento por volumen</b>`;
     for (const t of tiers) text += `\n• Desde ${t.min_qty}: ${money(productUnitPrice(p, t.min_qty))} c/u`;
   }
-  const desc = tgHtml(p.description_es || p.description_en);
-  if (desc) text += `\n\n${desc}`;
+  const desc = tgHtml(p.description_es || p.description_en, 1500);
+  if (desc) text += `\n${LINE}\n${desc}`;
 
   const kb = new InlineKeyboard();
   if (p.stock > 0) {
     const min = Math.max(1, p.min_order || 1);
     const opts = [...new Set([min, 2, 5, 10].filter((q) => q >= min && q <= p.stock))].slice(0, 4);
-    for (const q of opts) kb.text(`🛒 x${q}`, `pq:${ref(p.id)}:${q}`);
-    kb.row().text('✏️ Otra cantidad', `pqx:${ref(p.id)}`).row();
+    kb.text(`🛒 Comprar ahora · $${money(unit * min)}`, `pq:${ref(p.id)}:${min}`).row();
+    const more = opts.filter((q) => q !== min);
+    for (const q of more) kb.text(`x${q}`, `pq:${ref(p.id)}:${q}`);
+    kb.text('✏️ Otra cantidad', `pqx:${ref(p.id)}`);
+  } else {
+    kb.text('🔔 Agotado · vuelve pronto', 'noop');
   }
-  kb.text('⬅️ Volver', 'pl:0');
+  navRow(kb, `c:${cat.key}:0`);
   await show(ctx, text, kb);
 }
 
@@ -87,14 +145,14 @@ async function confirmProduct(ctx, draft) {
   const total = Number(money(unit * draft.qty));
   const u = await getUser(ctx.from.id);
   await setState(ctx.from.id, { step: 'confirm', draft: { ...draft, total } });
-  let text = `🧾 <b>Confirma tu compra</b>\n\n${esc(p.name)}\nCantidad: ${draft.qty}\nPrecio unitario: ${money(unit)} ${cur()}\n<b>Total: ${money(total)} ${cur()}</b>${copSuffix(total)}`;
-  if (draft.activation) text += `\nDatos: <code>${esc(draft.activation)}</code>`;
-  text += `\n\n💰 Tu saldo: ${money(u.balance)} ${cur()}`;
+  let text = `🧾 <b>Confirma tu compra</b>\n${LINE}\n${iconOf(p.name)} ${esc(p.name)}\n🔢 Cantidad: ${draft.qty}\n💵 Precio unitario: ${money(unit)} ${cur()}\n${LINE}\n💳 <b>Total: ${money(total)} ${cur()}</b>${copSuffix(total)}`;
+  if (draft.activation) text += `\n✍️ Datos: <code>${esc(draft.activation)}</code>`;
+  text += `\n💰 Tu saldo: ${money(u.balance)} ${cur()}`;
   const kb = new InlineKeyboard();
-  if (Number(u.balance) >= total) kb.text('✅ Confirmar compra', 'ok').text('❌ Cancelar', 'x');
+  if (Number(u.balance) >= total) kb.text('✅ Confirmar y pagar', 'ok').row().text('❌ Cancelar', 'x');
   else {
-    text += `\n⚠️ Te faltan <b>${money(total - Number(u.balance))} ${cur()}</b>.`;
-    kb.text(MENU.recharge, 'recharge').text('❌ Cancelar', 'x');
+    text += `\n\n⚠️ Te faltan <b>${money(total - Number(u.balance))} ${cur()}</b>${copSuffix(total - Number(u.balance))}`;
+    kb.text('💰 Recargar saldo', 'recharge').row().text('❌ Cancelar', 'x');
   }
   await show(ctx, text, kb);
 }
@@ -121,11 +179,11 @@ export async function showGames(ctx, kind = 'topup', page = 0) {
   try {
     data = await kokoro.games({ kind });
   } catch (e) {
-    return show(ctx, `⚠️ ${esc(errorEs(e))}`);
+    return show(ctx, `⚠️ ${esc(errorEs(e))}`, navRow(new InlineKeyboard()));
   }
   const games = (data.games || []).filter((g) => !isHidden(g.id));
   const kb = new InlineKeyboard();
-  for (const [k, label] of Object.entries(KINDS)) kb.text(k === kind ? `• ${label} •` : label, `g:${k}:0`);
+  for (const [k, label] of Object.entries(KINDS)) kb.text(k === kind ? `✅ ${label.split(' ').slice(1).join(' ')}` : label, `g:${k}:0`);
   kb.row();
   for (const g of games.slice(page * PER_PAGE, (page + 1) * PER_PAGE)) {
     const from = gameFromPrice(g);
@@ -133,7 +191,8 @@ export async function showGames(ctx, kind = 'topup', page = 0) {
   }
   pager(kb, `g:${kind}:`, page, games.length, PER_PAGE);
   kb.row().text('🔎 Buscar juego', 'gs');
-  await show(ctx, `${KINDS[kind]}\nElige un juego${games.length ? '' : '\n\n(no hay juegos en esta categoría)'}:`, kb);
+  navRow(kb);
+  await show(ctx, `🎮 <b>Juegos y Gift Cards</b>\n${LINE}\nRecargas directas a tu ID, gift cards y keys de PC.\n✅ Verificamos tu cuenta <b>antes</b> de cobrar.\n\n${KINDS[kind]}${games.length ? '' : '\n\n(no hay juegos en esta categoría)'}:`, kb);
 }
 
 async function loadGame(gameKey) {
@@ -163,8 +222,8 @@ async function showGame(ctx, gameKey, region = null, page = 0) {
       kb.text(cut(name, 30), `gr:${gk}:${slug}:0`);
       if (i % 2 === 1) kb.row();
     });
-    kb.row().text('⬅️ Volver', `g:${game.kind || 'topup'}:0`);
-    return show(ctx, `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>\n\n🌎 Elige la región de tu cuenta:`, kb);
+    navRow(kb, `g:${game.kind || 'topup'}:0`);
+    return show(ctx, `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>\n${LINE}\n🌎 Elige la región de tu cuenta:`, kb);
   }
   const list = region ? packs.filter((p) => (p.region || '-') === region) : packs;
   const kb = new InlineKeyboard();
@@ -172,9 +231,9 @@ async function showGame(ctx, gameKey, region = null, page = 0) {
     kb.text(`${cut(p.pack || p.name, 34)} · $${money(packPrice(p, game.id))}`, `pk:${gk}:${ref(p.id)}`).row();
   }
   pager(kb, `gr:${gk}:${region || '-'}:`, page, list.length, PER_PAGE);
-  kb.row().text('⬅️ Volver', regions.length > 1 ? `gg:${gk}` : `g:${game.kind || 'topup'}:0`);
+  navRow(kb, regions.length > 1 ? `gg:${gk}` : `g:${game.kind || 'topup'}:0`);
   const regionName = region ? regions.find(([s2]) => s2 === region)?.[1] : null;
-  await show(ctx, `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>${regionName ? ` — ${esc(regionName)}` : ''}\n\nElige un paquete:`, kb);
+  await show(ctx, `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>${regionName ? ` — ${esc(regionName)}` : ''}\n${LINE}\n💎 Elige un paquete:`, kb);
 }
 
 async function getPack(gameKey, packKey) {
@@ -190,7 +249,7 @@ async function showPack(ctx, gameKey, packKey) {
   if (!r) return show(ctx, '⚠️ Este paquete ya no está disponible. Vuelve a abrir el juego.');
   const { game, pack } = r;
   const price = packPrice(pack, game.id);
-  let text = `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>\n📦 <b>${esc(pack.pack || pack.name)}</b>\n\n💵 Precio: <b>${money(price)} ${cur()}</b>${copSuffix(price)}`;
+  let text = `${game.emoji_base || '🎮'} <b>${esc(game.name)}</b>\n💎 <b>${esc(pack.pack || pack.name)}</b>\n${LINE}\n💵 Precio: <b>${money(price)} ${cur()}</b>${copSuffix(price)}`;
   if (pack.region_name_es || pack.region_name) text += `\n🌎 Región: ${esc(pack.region_name_es || pack.region_name)}`;
   if (pack.delivery_time_es || pack.delivery_time) text += `\n⚡ Entrega: ${esc(pack.delivery_time_es || pack.delivery_time)}`;
   text += `\n📬 ${pack.delivery === 'code' ? 'Recibes un código' : 'Se recarga directo en tu cuenta'}`;
@@ -206,11 +265,12 @@ async function showPack(ctx, gameKey, packKey) {
   const kb = new InlineKeyboard();
   if (pack.delivery === 'code') {
     const max = Math.min(pack.max_quantity || 10, 10);
-    for (const q of [1, 2, 3, 5].filter((q) => q <= max)) kb.text(`🛒 x${q}`, `pb:${gk}:${pkk}:${q}`);
+    kb.text(`🛒 Comprar ahora · ${money(price)}`, `pb:${gk}:${pkk}:1`).row();
+    for (const q of [2, 3, 5].filter((q) => q <= max)) kb.text(`x${q}`, `pb:${gk}:${pkk}:${q}`);
   } else {
-    kb.text('🛒 Comprar', `pb:${gk}:${pkk}:1`);
+    kb.text(`🛒 Comprar ahora · ${money(price)}`, `pb:${gk}:${pkk}:1`);
   }
-  kb.row().text('⬅️ Volver', pack.region ? `gr:${gk}:${pack.region}:0` : `gg:${gk}`);
+  navRow(kb, pack.region ? `gr:${gk}:${pack.region}:0` : `gg:${gk}`);
   await show(ctx, text, kb);
 }
 
@@ -285,19 +345,19 @@ async function validateAndConfirmGame(ctx, draft) {
   const total = Number(money(unit * draft.qty));
   const u = await getUser(ctx.from.id);
   await setState(ctx.from.id, { step: 'confirm', draft: { ...draft, total } });
-  let text = `🧾 <b>Confirma tu compra</b>\n\n${esc(game.name)} — ${esc(pack.pack || pack.name)}${draft.qty > 1 ? ` x${draft.qty}` : ''}\n<b>Total: ${money(total)} ${cur()}</b>${copSuffix(total)}`;
+  let text = `🧾 <b>Confirma tu compra</b>\n${LINE}\n🎮 ${esc(game.name)} — ${esc(pack.pack || pack.name)}${draft.qty > 1 ? ` x${draft.qty}` : ''}`;
   for (const f of draft.ask) {
     const val = f.key === '__country' ? draft.country : draft.fields[f.key];
     const label = f.options?.find((o) => o.value === val)?.label || val;
     text += `\n${esc(f.label)}: <code>${esc(label)}</code>`;
   }
   text += check;
-  text += `\n\n💰 Tu saldo: ${money(u.balance)} ${cur()}`;
+  text += `\n${LINE}\n💳 <b>Total: ${money(total)} ${cur()}</b>${copSuffix(total)}\n💰 Tu saldo: ${money(u.balance)} ${cur()}`;
   const kb = new InlineKeyboard();
-  if (Number(u.balance) >= total) kb.text('✅ Confirmar compra', 'ok').text('❌ Cancelar', 'x');
+  if (Number(u.balance) >= total) kb.text('✅ Confirmar y pagar', 'ok').row().text('❌ Cancelar', 'x');
   else {
-    text += `\n⚠️ Te faltan <b>${money(total - Number(u.balance))} ${cur()}</b>.`;
-    kb.text(MENU.recharge, 'recharge').text('❌ Cancelar', 'x');
+    text += `\n\n⚠️ Te faltan <b>${money(total - Number(u.balance))} ${cur()}</b>${copSuffix(total - Number(u.balance))}`;
+    kb.text('💰 Recargar saldo', 'recharge').row().text('❌ Cancelar', 'x');
   }
   await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
 }
@@ -320,20 +380,21 @@ async function executeGame(ctx, draft) {
 // ===================== RESULTADO DE COMPRA =====================
 async function reportResult(ctx, res) {
   if (!res.ok && res.reason === 'balance') {
-    return ctx.reply('⚠️ Saldo insuficiente.', { reply_markup: new InlineKeyboard().text(MENU.recharge, 'recharge') });
+    return ctx.reply('⚠️ Saldo insuficiente.', { reply_markup: new InlineKeyboard().text('💰 Recargar saldo', 'recharge').text('🏠 Menú', 'm') });
   }
-  if (!res.ok) return ctx.reply(`❌ No se pudo completar la compra: ${esc(res.message)}\n\nNo se te cobró nada (el saldo fue devuelto).`, { parse_mode: 'HTML' });
+  const after = new InlineKeyboard().text('📦 Mis pedidos', 'ol').text('🛍 Seguir comprando', 'st').row().text('🏠 Menú', 'm');
+  if (!res.ok) return ctx.reply(`❌ <b>No se pudo completar la compra</b>\n${esc(res.message)}\n\n💰 No se te cobró nada (el saldo fue devuelto).`, { parse_mode: 'HTML', reply_markup: after });
   const o = res.order;
   if (o.status === 'delivered') {
-    return ctx.reply(`✅ <b>¡Compra exitosa! Pedido #${o.id}</b>\n${esc(o.product_name)}\n\n${formatDelivery(o)}\n\nGuarda esta información. También la encuentras en 📦 Mis pedidos.`, { parse_mode: 'HTML' });
+    return ctx.reply(`✅ <b>¡Compra exitosa!</b>\n${LINE}\n🧾 Pedido <b>#${o.id}</b> · ${esc(o.product_name)}\n💳 Pagado: ${money(o.price)} ${cur()}\n${LINE}\n${formatDelivery(o)}\n\n💾 Guarda esta información. Siempre la tienes en 📦 Mis pedidos.\n🙌 ¡Gracias por tu compra!`, { parse_mode: 'HTML', reply_markup: after });
   }
   if (o.status === 'refunded') {
-    return ctx.reply(`↩️ El proveedor rechazó el pedido #${o.id}${o.failure_reason ? `: ${esc(o.failure_reason)}` : ''}. Tu saldo fue devuelto.`, { parse_mode: 'HTML' });
+    return ctx.reply(`↩️ El proveedor rechazó el pedido #${o.id}${o.failure_reason ? `: ${esc(o.failure_reason)}` : ''}. Tu saldo fue devuelto.`, { parse_mode: 'HTML', reply_markup: after });
   }
   if (o.status === 'action_required') {
     await askForCode(o);
   } else {
-    await ctx.reply(`⏳ <b>Pedido #${o.id} en proceso</b>\n${esc(o.product_name)}\n\nNormalmente tarda unos segundos. Te aviso aquí en cuanto esté listo.`, { parse_mode: 'HTML' });
+    await ctx.reply(`⏳ <b>Pedido #${o.id} en proceso</b>\n${esc(o.product_name)}\n\nNormalmente tarda unos segundos. Te aviso aquí en cuanto esté listo.`, { parse_mode: 'HTML', reply_markup: after });
   }
   // revisiones rápidas para entregar lo antes posible
   for (const delay of [5000, 15000, 40000, 90000]) {
@@ -354,19 +415,23 @@ export async function doSearch(ctx, q) {
   try {
     games = ((await kokoro.games({ q })).games || []).filter((g) => !isHidden(g.id)).slice(0, 10);
   } catch { /* juegos no disponibles */ }
-  if (!prods.length && !games.length) return ctx.reply(`😕 No encontré nada para "${q}". Prueba con otra palabra.`);
+  if (!prods.length && !games.length) return ctx.reply(`😕 No encontré nada para "${q}". Prueba con otra palabra o explora la tienda.`, { reply_markup: new InlineKeyboard().text('🛍 Ver tienda', 'st').text('🏠 Menú', 'm') });
   const kb = new InlineKeyboard();
-  for (const p of prods) kb.text(`🛍 ${cut(p.name, 36)} · $${money(productUnitPrice(p))}`, `p:${ref(p.id)}`).row();
+  for (const p of prods) kb.text(`${iconOf(p.name)} ${cut(p.name, 36)} · ${money(productUnitPrice(p))}`, `p:${ref(p.id)}`).row();
   for (const g of games) {
     const from = gameFromPrice(g);
     kb.text(`🎮 ${cut(g.name, 36)}${from ? ` · desde $${money(from)}` : ''}`, `gg:${ref(g.id)}`).row();
   }
-  await ctx.reply(`🔎 Resultados para "<b>${esc(q)}</b>":`, { parse_mode: 'HTML', reply_markup: kb });
+  navRow(kb, 'st');
+  await ctx.reply(`🔎 <b>Resultados para "${esc(q)}"</b>\n${LINE}\n${prods.length + games.length} encontrados:`, { parse_mode: 'HTML', reply_markup: kb });
 }
 
 // ===================== REGISTRO =====================
 export function registerShop(bot) {
-  bot.callbackQuery(/^pl:(\d+)$/, (ctx) => showProducts(ctx, Number(ctx.match[1])));
+  bot.callbackQuery(/^pl:(\d+)$/, (ctx) => showStore(ctx));
+  bot.callbackQuery('st', (ctx) => showStore(ctx));
+  bot.callbackQuery('top', (ctx) => showTop(ctx));
+  bot.callbackQuery(/^c:(\w+):(\d+)$/, (ctx) => showCategory(ctx, ctx.match[1], Number(ctx.match[2])));
   bot.callbackQuery(/^p:(.+)$/, (ctx) => showProduct(ctx, ctx.match[1]));
   bot.callbackQuery(/^pq:(.+):(\d+)$/, (ctx) => startProductPurchase(ctx, ctx.match[1], Number(ctx.match[2])));
   bot.callbackQuery(/^pqx:(.+)$/, async (ctx) => {

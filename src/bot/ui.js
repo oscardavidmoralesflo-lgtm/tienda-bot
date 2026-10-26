@@ -1,26 +1,30 @@
 import { InlineKeyboard, Keyboard } from 'grammy';
 
+// Botones fijos de abajo (atajos). La navegación completa va en botones dentro del mensaje.
 export const MENU = {
-  products: '🛍 Productos',
-  games: '🎮 Juegos y Gift Cards',
-  search: '🔎 Buscar',
-  balance: '💰 Mi saldo',
-  recharge: '➕ Recargar saldo',
-  orders: '📦 Mis pedidos',
-  referrals: '👥 Invitar amigos',
-  support: '🆘 Soporte',
+  home: '🏠 Menú',
+  store: '🛍 Tienda',
+  profile: '👤 Mi perfil',
+  recharge: '💰 Recargar',
+};
+// Etiquetas del teclado anterior (para clientes que aún lo tienen)
+export const LEGACY = {
+  '🛍 Productos': 'store',
+  '🎮 Juegos y Gift Cards': 'games',
+  '🔎 Buscar': 'search',
+  '💰 Mi saldo': 'profile',
+  '➕ Recargar saldo': 'recharge',
+  '📦 Mis pedidos': 'orders',
+  '👥 Invitar amigos': 'referrals',
+  '🆘 Soporte': 'support',
 };
 
-export const mainKeyboard = () =>
-  new Keyboard()
-    .text(MENU.products).text(MENU.games).row()
-    .text(MENU.search).text(MENU.orders).row()
-    .text(MENU.balance).text(MENU.recharge).row()
-    .text(MENU.referrals).text(MENU.support)
-    .resized()
-    .persistent();
+export const LINE = '━━━━━━━━━━━━━━━━━━';
 
-// Muestra una pantalla: edita el mensaje si viene de un botón, si no envía uno nuevo
+export const mainKeyboard = () =>
+  new Keyboard().text(MENU.home).text(MENU.store).row().text(MENU.profile).text(MENU.recharge).resized().persistent();
+
+// Muestra una pantalla: edita el mensaje si viene de un botón (instantáneo), si no envía uno nuevo
 export async function show(ctx, text, keyboard) {
   const opts = { parse_mode: 'HTML', reply_markup: keyboard, link_preview_options: { is_disabled: true } };
   if (ctx.callbackQuery?.message?.text) {
@@ -45,11 +49,20 @@ export function pager(kb, prefix, page, total, perPage) {
   const pages = Math.ceil(total / perPage);
   if (pages <= 1) return kb;
   kb.row();
-  if (page > 0) kb.text('⬅️', `${prefix}${page - 1}`);
-  kb.text(`${page + 1}/${pages}`, 'noop');
-  if (page < pages - 1) kb.text('➡️', `${prefix}${page + 1}`);
+  kb.text(page > 0 ? '◀️' : '·', page > 0 ? `${prefix}${page - 1}` : 'noop');
+  kb.text(`${page + 1} / ${pages}`, 'noop');
+  kb.text(page < pages - 1 ? '▶️' : '·', page < pages - 1 ? `${prefix}${page + 1}` : 'noop');
+  return kb;
+}
+
+// Fila de navegación estándar: Atrás + Menú
+export function navRow(kb, back) {
+  kb.row();
+  if (back) kb.text('⬅️ Atrás', back);
+  kb.text('🏠 Menú', 'm');
   return kb;
 }
 
 export const cut = (t, n = 48) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
 export const cancelKb = () => new InlineKeyboard().text('❌ Cancelar', 'x');
+export const stockIcon = (n) => (n > 20 ? '🟢' : n > 0 ? '🟡' : '🔴');

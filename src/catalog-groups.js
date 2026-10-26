@@ -33,5 +33,7 @@ export const GROUPS = [
   { name: 'API Codex 100M Tokens', items: ['bunny:61', 'w4_6a4804d49ad6f6fd40a4c369'] },
 ];
 
-// Productos que nunca se muestran a clientes (pruebas o servicios internos)
-export const ALWAYS_HIDDEN = ['prueba_bot', 'bot_kokoro'];
+// Productos que nunca se muestran a clientes:
+// - pruebas y servicios internos del proveedor
+// - "Links Shop de Ccs" (datos de tarjetas robadas) y "Method" (métodos para no pagar un servicio): ilegales / fraude
+export const ALWAYS_HIDDEN = ['prueba_bot', 'bot_kokoro', 'links_shops_ccs', 'method_capcut'];

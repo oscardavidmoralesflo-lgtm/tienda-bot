@@ -11,19 +11,20 @@ export async function loadOverrides() {
 export const getOverride = (id) => overrides.get(id) || null;
 export const isHidden = (id) => !!overrides.get(id)?.hidden;
 
-export async function saveOverride(itemId, kind, name, { markup, fixed_price, hidden }) {
+export async function saveOverride(itemId, kind, name, { markup, fixed_price, hidden, featured }) {
   const clean = (v) => (v === '' || v === undefined || v === null || Number.isNaN(Number(v)) ? null : Number(v));
   const m = clean(markup);
   const f = clean(fixed_price);
   const h = !!hidden;
-  if (m === null && f === null && !h) {
+  const ft = !!featured;
+  if (m === null && f === null && !h && !ft) {
     await query('DELETE FROM overrides WHERE item_id = $1', [itemId]);
   } else {
     await query(
-      `INSERT INTO overrides (item_id, kind, name, markup, fixed_price, hidden, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,now())
-       ON CONFLICT (item_id) DO UPDATE SET kind=$2, name=$3, markup=$4, fixed_price=$5, hidden=$6, updated_at=now()`,
-      [itemId, kind, name, m, f, h],
+      `INSERT INTO overrides (item_id, kind, name, markup, fixed_price, hidden, featured, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+       ON CONFLICT (item_id) DO UPDATE SET kind=$2, name=$3, markup=$4, fixed_price=$5, hidden=$6, featured=$7, updated_at=now()`,
+      [itemId, kind, name, m, f, h, ft],
     );
   }
   await loadOverrides();

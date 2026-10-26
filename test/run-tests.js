@@ -202,6 +202,19 @@ await test('caché: responde al instante con dato viejo y refresca en segundo pl
   assert.ok(r.ok >= 1);
 });
 
+await test('categorías de la tienda y productos prohibidos ocultos', async () => {
+  const { categoryOf } = await import('../src/categories.js');
+  assert.equal(categoryOf('Gemini AI PRO 18 Meses').key, 'ai');
+  assert.equal(categoryOf('Coursera 12M+ Gemini PRO 3M').key, 'edu');
+  assert.equal(categoryOf('API Claude 10M Tokens').key, 'api');
+  assert.equal(categoryOf('YouTube Premium 3 Meses (Link)').key, 'stream');
+  assert.equal(categoryOf('GitHub Accounts — 1 Month+ Old').key, 'mail');
+  assert.equal(categoryOf('GitHub Pro + Student 2 Year').key, 'dev');
+  assert.equal(categoryOf('Windows 10/11 Pro Key').key, 'office');
+  const { ALWAYS_HIDDEN } = await import('../src/catalog-groups.js');
+  assert.ok(ALWAYS_HIDDEN.includes('links_shops_ccs') && ALWAYS_HIDDEN.includes('method_capcut'));
+});
+
 console.log(`\n${pass} pruebas OK`);
 mock.close();
 process.exit(0);

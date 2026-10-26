@@ -18,9 +18,10 @@ export const DEFAULTS = {
   low_balance_alert: '10', // te avisa cuando tu saldo en KOKORO baje de esto
   maintenance: '0',
   welcome_text:
-    '👋 ¡Hola {name}! Bienvenido a <b>{shop}</b>.\n\n' +
-    'Aquí compras cuentas, licencias, recargas de juegos y gift cards con entrega automática al instante.\n\n' +
-    'Usa el menú de abajo para empezar 👇',
+    '👋 ¡Hola {name}! Bienvenido a <b>{shop}</b>\n' +
+    '🤖 IA · 🎬 Streaming · 🎨 Diseño · 🎮 Juegos\n' +
+    '⚡ Entrega automática 24/7 · 🔒 Con garantía',
+  channel_url: '', // enlace a tu canal de Telegram (https://t.me/...) para el botón 📢 Canal
   payment_instructions:
     '💳 <b>Métodos de pago</b> (sin comisión)\n\n' +
     '• Bre-B (llave): <code>@tu_llave</code>\n' +

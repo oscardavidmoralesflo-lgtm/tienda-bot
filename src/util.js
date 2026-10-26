@@ -25,7 +25,7 @@ export function tgHtml(html, max = 2500) {
     }
     return '';
   });
-  t = t.replace(/<a>([\s\S]*?)<\/a>/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+  t = t.replace(/<a>([\s\S]*?)<\/a>/g, '$1').replace(/<\/blockquote>\s*\n+/g, '</blockquote>\n').replace(/\n{3,}/g, '\n\n').trim();
   if (t.length > max) t = stripTags(t).slice(0, max) + '…';
   return t;
 }

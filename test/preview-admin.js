@@ -40,6 +40,21 @@ await orders.buyProduct({ userId: 5002, product: { ...p, _unitCost: 3 }, quantit
 const g = await kokoro.gamePacks('topup:free-fire');
 await orders.buyGamePack({ userId: 5002, pack: g.products[0], game: g.game, unitPrice: 0.86, fields: { player_id: '12345' } });
 await query("INSERT INTO recharges (user_id, amount, proof_type) VALUES (5001, 10, 'photo')");
+// datos de ejemplo: 14 días de ventas
+const names = [['Gemini AI PRO 18 Meses', 1.5, 1.8], ['ChatGPT Plus 1 Mes (Sin garantía)', 5.25, 7.15], ['CapCut Pro Team 1 Mes', 1.99, 2.79], ['Canva Pro Edu (Invitación)', 0.5, 0.8], ['YouTube Premium 3 Meses (Link)', 2.9, 4.06], ['Spotify Premium 3 Meses', 1, 1.4], ['Free Fire — 110 Diamonds', 0.74, 0.89]];
+const people = [['Laura', 'laura_co'], ['Andrés', 'andres_gt'], ['Camila', 'cami'], ['Juan Pablo', null], ['Valentina', 'vale_r'], ['Mateo', 'mateo99']];
+for (let i = 0; i < people.length; i++) { await users.upsertUser({ id: 6000 + i, first_name: people[i][0], username: people[i][1] }); await users.credit(6000 + i, 5 + i * 3, 'recharge', 'demo'); }
+let n = 0;
+for (let d = 13; d >= 0; d--) {
+  const k = 2 + ((d * 7) % 5) + (d < 4 ? 3 : 0);
+  for (let j = 0; j < k; j++) {
+    const [name, cost, price] = names[(d + j) % names.length];
+    await query(`INSERT INTO orders (user_id, kind, product_id, product_name, quantity, cost, price, status, external_order_id, delivery, created_at)
+      VALUES ($1, 'product', 'demo', $2, 1, $3, $4, 'delivered', $5, 'demo@mail.com | pass123', now() - ($6 || ' days')::interval - ($7 || ' hours')::interval)`,
+      [6000 + ((d + j) % people.length), name, cost, price, 'demo-' + (n++), d, j]);
+  }
+}
+await query("INSERT INTO recharges (user_id, amount, proof_type) VALUES (6001, 20, 'photo'), (6003, 5, 'document')");
 
 const app = express();
 app.use('/admin', adminRouter(fakeBot));

@@ -74,3 +74,6 @@ CREATE TABLE IF NOT EXISTS overrides (
   hidden BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Productos destacados (aparecen en "Más vendidos" del bot)
+ALTER TABLE overrides ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE;
