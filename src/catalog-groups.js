@@ -2,7 +2,16 @@
 // la más barata que tenga stock (si se agota, pasa sola a la siguiente).
 // "name" es el nombre que verá el cliente. IDs de Bunny con prefijo "bunny:".
 // Revisado el 2026-10-24 comparando los catálogos de KOKORO y Bunny.
-export const GROUPS = [
+// Las equivalencias históricas mezclaban modalidades, duración y garantía.
+// Quedan retiradas de la selección automática. Agregar solo contratos realmente iguales.
+export const GROUPS = [];
+export const PRODUCT_LABELS = {
+  '01316437-5e32-4e04-b4dc-497144fd7c96': 'Vibi — 1 millón de créditos (CDK, sin vencimiento)',
+  'bunny:31': 'Muse AI — 1000 millones de tokens',
+  '630d58eb-7cd1-4707-a411-734a3e4ee08a': 'Muse AI — 1000 millones de tokens (NW)',
+};
+// Referencia de la revisión anterior; no se utiliza para agrupar productos.
+export const LEGACY_GROUPS = [
   { name: 'Gemini AI PRO 18 Meses', items: ['bunny:57', 'gemini_pro_18m'] },
   { name: 'Spotify Premium 3 Meses', items: ['bunny:11', 'code_spotify_90d'] },
   { name: 'Super Duolingo 12 Meses', items: ['bunny:12', 'super_duolingo_12m', 'cf3a4cc4-8df7-4d15-bbe4-1836bec1c0da'] },

@@ -2,6 +2,9 @@
 import { one } from './db.js';
 
 const ES = {
+  quote_invalid: 'La cantidad o el precio no son válidos. Abre de nuevo el producto.',
+  quote_unavailable: 'No pudimos confirmar precio, stock o disponibilidad del proveedor. No se realizó una compra nueva; vuelve a abrir el producto.',
+  price_changed: 'El precio o las condiciones cambiaron. Revisa la ficha y confirma de nuevo; no se te ha cobrado.',
   // idioma
   lang_pick: '🌐 <b>Elige tu idioma</b>\n<b>Choose your language</b>',
   lang_set: '✅ Idioma: Español',
@@ -147,6 +150,9 @@ const ES = {
 };
 
 const EN = {
+  quote_invalid: 'Invalid quantity or price. Open the product again.',
+  quote_unavailable: 'We could not confirm the supplier price, stock or availability. No new purchase was placed; open the product again.',
+  price_changed: 'The price or terms changed. Review the product and confirm again; you have not been charged.',
   lang_pick: ES.lang_pick,
   lang_set: '✅ Language: English',
   btn_menu: '🏠 Menu', btn_back: '⬅️ Back', btn_cancel: '❌ Cancel',

@@ -5,6 +5,8 @@ import { bunny } from './bunny.js';
 import * as cache from './cache.js';
 import { setAutoCop } from './pricing.js';
 import { sendRenewals } from './orders.js';
+import { PROVIDER_SPECS } from './provider-settings.js';
+import { extraProducts } from './providers.js';
 
 const KINDS = ['topup', 'giftcard', 'key'];
 export const lastRefresh = { at: null, ok: 0, total: 0, ms: 0 };
@@ -29,7 +31,7 @@ export async function updateFx(force = false) {
 export async function warmUp() {
   const t = Date.now();
   updateFx(true);
-  await Promise.allSettled([kokoro.products(), bunny.products(), ...KINDS.map((kind) => kokoro.games({ kind }))]);
+  await Promise.allSettled([kokoro.products(), bunny.products(), ...Object.keys(PROVIDER_SPECS).map(id=>extraProducts(id)), ...KINDS.map((kind) => kokoro.games({ kind }))]);
   // paquetes de los primeros juegos de cada categoría (los más usados) para que abran al instante
   const lists = await Promise.allSettled(KINDS.map((kind) => kokoro.games({ kind })));
   const ids = lists.flatMap((r) => (r.status === 'fulfilled' ? (r.value.games || []).slice(0, 8).map((g) => g.id) : []));
@@ -39,7 +41,7 @@ export async function warmUp() {
 
 async function tick() {
   const t = Date.now();
-  const r = await cache.refreshAll({ always: ['k:products', 'b:products', ...KINDS.map((k) => `k:games::${k}:0`)] });
+  const r = await cache.refreshAll({ always: ['k:products', 'b:products', ...Object.keys(PROVIDER_SPECS).map(id=>`p:${id}:products`), ...KINDS.map((k) => `k:games::${k}:0`)] });
   Object.assign(lastRefresh, { at: new Date(), ...r, ms: Date.now() - t });
   updateFx();
   sendRenewals().catch((e) => console.error('renovaciones', e.message));

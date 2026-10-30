@@ -5,6 +5,7 @@ import { config, checkConfig } from './config.js';
 import { initDb } from './db.js';
 import { loadSettings } from './settings.js';
 import { loadOverrides } from './pricing.js';
+import { loadProviderSettings } from './provider-settings.js';
 import { verifyWebhook } from './kokoro.js';
 import { verifyBoldSignature } from './bold.js';
 import { s as setting } from './settings.js';
@@ -21,6 +22,7 @@ if (missing.length) {
 
 const dbKind = await initDb();
 await loadSettings();
+await loadProviderSettings();
 await loadOverrides();
 console.log(`✅ Base de datos: ${dbKind === 'local' ? 'local (./data)' : 'PostgreSQL'}`);
 

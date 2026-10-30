@@ -1,7 +1,9 @@
-// Catálogo unificado: KOKORO + Bunny, sin duplicados, con el mejor costo de cada producto.
+// Catálogo de proveedores. Solo se combinan equivalencias revisadas explícitamente.
 import { kokoro } from './kokoro.js';
 import { bunny, bunnyEnabled } from './bunny.js';
-import { GROUPS, ALWAYS_HIDDEN } from './catalog-groups.js';
+import { GROUPS, ALWAYS_HIDDEN, PRODUCT_LABELS } from './catalog-groups.js';
+import { PROVIDER_SPECS } from './provider-settings.js';
+import { extraProducts, isExtraProvider } from './providers.js';
 
 const groupOf = new Map();
 GROUPS.forEach((g, i) => g.items.forEach((id) => groupOf.set(id, i)));
@@ -11,17 +13,18 @@ export const bunnyStatus = () => ({ enabled: bunnyEnabled(), error: lastBunnyErr
 
 async function sources(fresh) {
   const [k, b] = await Promise.allSettled([kokoro.products(fresh), bunny.products(fresh)]);
-  if (k.status === 'rejected' && b.status === 'rejected') throw k.reason;
   lastBunnyError = b.status === 'rejected' ? b.reason.message : null;
   if (b.status === 'rejected') console.error('Bunny:', b.reason.message);
   const kp = k.status === 'fulfilled' ? k.value.map((p) => ({ ...p, source: 'kokoro' })) : [];
-  return [...kp, ...(b.status === 'fulfilled' ? b.value : [])];
+  const extra = await Promise.allSettled(Object.keys(PROVIDER_SPECS).map(id=>extraProducts(id,{fresh})));
+  if(k.status==='rejected'&&b.status==='rejected'&&!extra.some(r=>r.status==='fulfilled'&&r.value.length))throw k.reason;
+  return [...kp, ...(b.status === 'fulfilled' ? b.value : []), ...extra.flatMap(r=>r.status==='fulfilled'?r.value:[])];
 }
 
 // Todos los productos de ambos proveedores, marcando cuál gana en cada grupo (para el panel)
 // Grupos manuales (catalog-groups.js) y, además, productos con exactamente el mismo nombre
-const nameKey = (n) => `name:${String(n).toLowerCase().replace(/\s+/g, ' ').trim()}`;
-const keyOf = (p) => (groupOf.has(p.id) ? `g:${groupOf.get(p.id)}` : nameKey(p.name));
+// Un nombre idéntico no demuestra igualdad de región, garantía, créditos o duración.
+const keyOf = (p) => (groupOf.has(p.id) ? `g:${groupOf.get(p.id)}` : `offer:${p.id}`);
 
 export async function allProducts(fresh = false) {
   const list = (await sources(fresh)).filter((p) => !ALWAYS_HIDDEN.includes(p.id));
@@ -36,7 +39,7 @@ export async function allProducts(fresh = false) {
   return list.map((p) => {
     const k = keyOf(p);
     const manual = groupOf.has(p.id) ? GROUPS[groupOf.get(p.id)].name : null;
-    if (!manual && size.get(k) === 1) return { ...p, group: null, winner: true };
+    if (!manual && size.get(k) === 1) return { ...p, name:PRODUCT_LABELS[p.id] || p.name, group: null, winner: true };
     const groupName = manual || p.name;
     return { ...p, group: groupName, winner: best.get(k).id === p.id, displayName: manual || undefined };
   });
@@ -61,8 +64,11 @@ export async function products(fresh = false) {
 // fresh=true (al pagar) solo vuelve a consultar el proveedor de ESE producto
 export async function findProduct(id, fresh = false) {
   if (fresh) {
-    if (String(id).startsWith('bunny:')) await bunny.products(true).catch(() => {});
-    else await kokoro.products(true).catch(() => {});
+    const source=String(id).split(':')[0];
+    // Si falla la actualización se detiene el pago; nunca utilizar precio/stock antiguos.
+    if (source === 'bunny') await bunny.products(true);
+    else if(isExtraProvider(source))await extraProducts(source,{fresh:true});
+    else await kokoro.products(true);
   }
   return (await allProducts(false)).find((p) => p.id === id) || null;
 }
