@@ -1,5 +1,6 @@
 // Catálogo, juegos, búsqueda y compra (bilingüe: ctx.lang = 'es' | 'en')
 import { InlineKeyboard } from 'grammy';
+import crypto from 'node:crypto';
 import { kokoro } from '../kokoro.js';
 import * as catalog from '../catalog.js';
 import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, getOverride, fmt, fmtS, round4 } from '../pricing.js';
@@ -18,6 +19,7 @@ const T = (ctx, key, vars) => t(ctx.lang, key, vars);
 const en = (ctx) => ctx.lang === 'en';
 // textos de los proveedores en el idioma del cliente
 const pick = (ctx, es, other) => (en(ctx) ? other || es : es || other);
+const termsOf = p => crypto.createHash('sha256').update(JSON.stringify([p.id,p.name,p.description_es,p.description_en,p.requires_activation_data,p.activation_data_type,p.input_fields,p.min_order,p.max_order])).digest('hex');
 
 // ===================== PRODUCTOS =====================
 async function visibleProducts() {
@@ -153,7 +155,7 @@ async function confirmProduct(ctx, draft) {
   const unit = productUnitPrice(p, draft.qty);
   const total = round4(unit * draft.qty);
   const u = await getUser(ctx.from.id);
-  await setState(ctx.from.id, { step: 'confirm', draft: { ...draft, total } });
+  await setState(ctx.from.id, { step: 'confirm', draft: { ...draft, total, terms:termsOf(p) } });
   let text = `${T(ctx, 'confirm_title')}\n${LINE}\n${iconOf(p.name)} ${esc(localName(p.name, ctx.lang))}\n${T(ctx, 'c_qty', { q: draft.qty })}\n${T(ctx, 'c_unit', { p: fmt(unit) })}\n${LINE}\n${T(ctx, 'c_total', { t: fmt(total) })}`;
   if (draft.activation) text += `\n${T(ctx, 'c_data', { d: esc(draft.activation) })}`;
   text += `\n${T(ctx, 'c_balance', { b: fmt(u.balance) })}`;
@@ -163,9 +165,15 @@ async function confirmProduct(ctx, draft) {
 }
 
 async function executeProduct(ctx, draft) {
-  const p = await findProduct(draft.productId, true);
+  let p;
+  try { p=await findProduct(draft.productId,true); }
+  catch { return ctx.reply(T(ctx,'quote_unavailable')); }
   if (!p || p.stock < draft.qty) return ctx.reply(T(ctx, 'no_stock_now'));
   const unit = productUnitPrice(p, draft.qty);
+  if(!draft.terms || draft.terms!==termsOf(p) || round4(unit*draft.qty)>Number(draft.total)+0.0001) {
+    await ctx.reply(T(ctx,'price_changed'));
+    return confirmProduct(ctx,draft);
+  }
   const res = await buyProduct({
     userId: ctx.from.id,
     product: { ...p, _unitCost: productUnitCost(p, draft.qty) },
@@ -378,6 +386,10 @@ async function validateAndConfirmGame(ctx, draft) {
 async function executeGame(ctx, draft) {
   const r = await getPack(ref(draft.gameId), ref(draft.packId));
   if (!r) return ctx.reply(T(ctx, 'pack_unavailable'));
+  if(round4(packPrice(r.pack,r.game.id)*draft.qty)>Number(draft.total)+0.0001) {
+    await ctx.reply(T(ctx,'price_changed'));
+    return validateAndConfirmGame(ctx,draft);
+  }
   const res = await buyGamePack({
     userId: ctx.from.id,
     pack: r.pack,
@@ -482,7 +494,9 @@ export function registerShop(bot) {
   bot.callbackQuery('ok', async (ctx) => {
     const st = ctx.dbUser.state;
     if (st?.step !== 'confirm') return ctx.reply(T(ctx, 'purchase_expired'));
-    await setState(ctx.from.id, null); // evita doble clic
+    // Dos callbacks pueden leer el mismo estado antes de que termine el primero.
+    const claimed=await one('UPDATE users SET state=NULL WHERE id=$1 AND state=$2::jsonb RETURNING id',[ctx.from.id,JSON.stringify(st)]);
+    if(!claimed)return ctx.reply(T(ctx,'purchase_expired'));
     await ctx.editMessageReplyMarkup().catch(() => {});
     await ctx.replyWithChatAction('typing');
     return st.draft.type === 'product' ? executeProduct(ctx, st.draft) : executeGame(ctx, st.draft);
