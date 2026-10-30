@@ -1,20 +1,28 @@
 # Contexto del proyecto: Nova Plus (bot de Telegram revendedor)
 
-> **Actualización 2026-10-30:** Se añadieron `provider-settings.js`, `providers.js` y `/admin/providers`: credenciales cifradas y adaptadores SafwanTiger/P-AI/HMK/ResellWithMe. Safwan y P-AI tienen claves emitidas guardadas solo en `.env` local y catálogos leídos; la configuración de producción debe guardarse desde el panel o Render, sin publicar claves. HMK/RWM requieren credenciales de sus cuentas.
+> **Estado comprobado 2026-10-30:** El bot está desplegado en Northflank Developer Sandbox gratuito: equipo `oscardavidmoralesflo-lgtms-team`, proyecto `default`, servicio `nova-plus`, región US - Central, una instancia `nf-compute-20` (0,2 vCPU y 512 MB). Panel: https://p01--nova-plus--lrqtmg7p4xwj.code.run/admin. `/health` respondió 200 y Telegram confirmó el webhook en ese dominio sin mensajes pendientes ni errores. El usuario verificó una tarjeta; el plan sigue Free.
+>
+> Se integró la PR #1 y se aprobaron pruebas y Docker en GitHub Actions. El primer despliegue se verificó con `ghcr.io/oscardavidmoralesflo-lgtm/tienda-bot:23cc033d0568b5c0afec39e3737bcdd6e55f9550`; consultar el panel de Northflank para la etiqueta vigente. Es una etiqueta fija: otra publicación NO actualiza automáticamente el servicio; hay que seleccionar la imagen nueva y verificar el despliegue. Las claves de bot, proveedores y base de datos se configuraron en variables privadas con autorización explícita. Las cuatro variables Bold/Binance estaban vacías; sus recargas automáticas siguen sin configurar.
+>
+> KOKORO, Bunny, Safwan y P-AI tenían saldo 0. Safwan tiene 20 productos preseleccionados; P-AI tiene 2 (iLovePDF anual y Customer.io). Estas dos conexiones permanecen apagadas hasta contar con saldo. No se hicieron compras ni depósitos reales. Se retiraron pagos y soporte de ejemplo del bot: faltan los datos reales del dueño. El catálogo base mostró 201 artículos con stock; tener catálogo no implica tener fondos para comprarlos.
+>
+> Render conserva el servicio anterior, pero Auto-Deploy está Off y el comando de inicio termina sin arrancar el bot. Esto evita que otra instancia cambie el webhook al reiniciarse el cupo gratuito. Para volver a Render, restaurar `npm start` después de detener Northflank. No modificar otros servicios del workspace.
+>
+> Se añadieron `provider-settings.js`, `providers.js` y `/admin/providers`: credenciales cifradas y adaptadores SafwanTiger/P-AI/HMK/ResellWithMe. HMK/RWM requieren credenciales propias y siguen sin configurar.
 >
 > Los antiguos grupos automáticos se retiraron porque mezclaban garantías, duraciones y Vibi/ElevenLabs. `GROUPS` queda reservado para equivalencias que se revisen de verdad; `LEGACY_GROUPS` conserva la referencia anterior. Se bloquea el pago con catálogo no actualizado, subida de precio sin nueva confirmación y margen insuficiente. El mínimo estimado protege también precios fijos e incluye reservas configurables para comisiones/fidelización. Recomendación inicial: productos $0,50, juegos $0,10; los ajustes existentes no se sobrescriben al arrancar.
 >
 > Safwan y Bunny no se reintentan con resultado incierto; la revisión se hace en el panel. Las entregas parciales permanecen pendientes. Los callbacks de confirmación se reclaman atómicamente para evitar doble compra. Las compras de pruebas usan servidores simulados: nunca ejecutar `npm start` local contra el bot productivo para probar el panel.
 >
-> El resto de este documento describe la base previa. Las afirmaciones anteriores sobre «más barato sin duplicados» deben interpretarse según esta actualización. El estado real del despliegue y financiación se comprueba en Render y en cada proveedor.
+> La etiqueta de moneda de categorías usa `COP` cuando `copMode()` está activo, igual que los precios mostrados. El resto de este documento mantiene referencias a la implementación previa; esta actualización tiene prioridad cuando exista una diferencia.
 
-> Documento para retomar el proyecto con otra IA o desarrollador. **No contiene contraseñas ni tokens**: esos están solo en `.env` (local) y en las variables de entorno de Render.
+> Documento para retomar el proyecto. **No contiene contraseñas ni tokens**: se conservan en `.env` local y variables privadas de los alojamientos autorizados.
 
 ## 1. Qué es
 **Nova Plus** es una tienda en Telegram que revende productos digitales (IA, streaming, diseño, Office, VPN, recargas de juegos, gift cards, keys) comprándolos automáticamente a dos proveedores mayoristas y cobrando al cliente con margen. Público principal: Colombia (precios en pesos), bilingüe español/inglés.
 
 - Bot actual: `@MiTiendaDigital2847_bot` (nombre visible "Nova Plus"). Pendiente: crear `@NovaPlusStoreBot` en @BotFather y cambiar el token (el usuario de un bot no se puede renombrar).
-- Panel admin: https://tienda-bot-dspr.onrender.com/admin (contraseña en `.env` → `ADMIN_PASSWORD`).
+- Panel admin actual: https://p01--nova-plus--lrqtmg7p4xwj.code.run/admin (misma `ADMIN_PASSWORD`). La URL anterior de Render está inactiva.
 - Repositorio (público, sin secretos): https://github.com/oscardavidmoralesflo-lgtm/tienda-bot
 - Admin de Telegram (ID): 1309369460
 
@@ -26,9 +34,9 @@
 
 ## 3. Arquitectura
 - **Node.js 20+ (ESM)**, `grammy` (bot), `express` (panel + webhooks), `pg` (PostgreSQL), `@electric-sql/pglite` (base local para pruebas sin `DATABASE_URL`).
-- **Hosting**: Render (plan free, región Virginia), servicio `srv-dbeh5u5g1s2s73fj7igg`, auto-deploy al hacer push a `main`. El bot usa webhook de Telegram (`/tg/<hash>`); en local usa polling.
+- **Hosting actual**: Northflank Developer Sandbox con imagen Docker de GHCR y etiqueta fija de commit. GitHub Actions prueba y publica una imagen al integrar a `main`; después se selecciona la nueva imagen en Northflank. Render `srv-dbeh5u5g1s2s73fj7igg` queda como destino anterior inactivo. El bot usa webhook de Telegram (`/tg/<hash>`); en local usa polling.
 - **Base de datos**: Supabase, proyecto `tienda-bot` (id `mjfptoobualwppugqhja`), esquema privado `tienda`, rol propio `tienda_bot` vía session pooler `aws-0-us-east-1`. RLS activado. Las tablas se crean/actualizan solas al arrancar (`src/schema.sql`, con `ALTER … IF NOT EXISTS`). **No tocar el proyecto Supabase "stoa"** (es de otra app del usuario).
-- Keep-alive: el propio servidor se visita cada 3 min para que Render free no se duerma (consume ~744 h/mes de las 750 gratis compartidas con otros servicios del usuario).
+- Northflank usa `KEEP_ALIVE=0`; los refrescos de precios y pedidos siguen activos. Mantener despierto Render gratuito no elimina su cuota mensual compartida.
 
 ### Archivos principales (`src/`)
 | Archivo | Función |
@@ -74,26 +82,26 @@ Resumen (ganancia, gráfica 14 días, saldos de proveedores y cobertura, más ve
 `BOT_TOKEN`, `KOKORO_API_TOKEN`, `BUNNY_API_KEY`, `BINANCE_API_KEY`, `BINANCE_API_SECRET` (solo lectura), `BOLD_API_KEY`, `BOLD_SECRET_KEY`, `ADMIN_IDS`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SHOP_PREFIX`, `DATABASE_URL`, `DB_SCHEMA=tienda`, `PUBLIC_URL` (Render la detecta sola).
 
 ## 7. Márgenes recomendados (por defecto)
-Productos por costo: ≤1 USD 60 % · ≤3 USD 40 % · ≤10 USD 30 % · ≤30 USD 20 % · resto 12 %, mínimo 0,20 USD por pedido. Juegos: ≤5 USD 20 % · ≤20 USD 12 % · resto 8 %. Tasa COP: automática + 3 %.
+Protección guardada: mínimo estimado de 0,50 USD por pedido de productos y 0,10 USD en juegos; margen mínimo sobre venta de 15 % y 5 %; reserva de incidencias de 2 % y reserva de máximos de referidos, ñapa y bonos. Los márgenes por tramos siguen disponibles. Los cargos desconocidos no están garantizados por esta estimación.
 
 ## 8. Comandos útiles
 ```bash
 npm install
-npm test                    # 22 pruebas, no gasta saldo real
+npm test                    # 42 pruebas, sin compras reales
 node test/preview-bot.js    # genera test/bot-preview.html
 node test/preview-admin.js  # panel de prueba en http://localhost:3999/admin (contraseña demo1234)
 npm start                   # ¡OJO! en local quita el webhook del bot de producción
 ```
-Desplegar: `git push` a `main` → Render despliega solo.
+Publicar en `main` activa las pruebas y la imagen GHCR. Desplegar requiere seleccionar su etiqueta de commit en Northflank y comprobar `/health`, webhook y panel. El usuario pide operar GitHub y los alojamientos mediante Egolite.
 
 ## 9. Pendientes
-1. Binance: crear llave API con SOLO "Enable Reading", ponerla en `.env`/Render, y en Panel → Ajustes poner el Binance Pay ID y direcciones TRC20/BEP20; hacer una recarga real de 1 USDT de prueba.
-1b. (Opcional, apagado) Crear cuenta Bold, activar llaves de "Botón de pagos", pegarlas en `.env`/Render y configurar el webhook `https://tienda-bot-dspr.onrender.com/bold/webhook`; hacer un pago real pequeño de prueba.
-2. Recargar saldo en KOKORO y Bunny (estaban en $0).
+1. Recibir los datos reales de cobro y soporte; reemplazar en el panel el aviso temporal de recargas pendientes de habilitación.
+1b. Binance/Bold siguen sin claves. Si se habilitan, verificar condiciones del procesador y configurar callbacks en el dominio de Northflank. Las pruebas de pago requieren autorización de un importe concreto.
+2. El usuario debe recargar al menos un proveedor. Los cuatro proveedores consultados estaban en 0; no se efectuaron depósitos.
 3. Probar una compra real en Bunny (formato de respuesta de compra aún no visto en real).
 4. Llenar en el panel: datos reales de pago (llave Bre-B, Nequi), contacto de soporte, canal.
 5. Crear `@NovaPlusStoreBot` y cambiar `BOT_TOKEN`.
-6. Opcional: Render Starter ($7/mes) para más velocidad y no depender del keep-alive.
+6. Mantener el alojamiento gratuito hasta que el usuario decida migrar. No contratar un plan de pago sin autorización explícita.
 
 ## 10. Notas para quien continúe
 - Nunca subir `.env` al repositorio (está en `.gitignore`).

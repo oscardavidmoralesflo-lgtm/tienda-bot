@@ -57,8 +57,16 @@ Sin `DATABASE_URL` usa una base de datos local en `./data`.
 
 Pruebas automáticas (con un KOKORO simulado, no gasta saldo): `npm test`
 
-## Publicar gratis 24/7 (Render + Supabase)
-1. **Base de datos (Supabase)**: en tu proyecto → *Connect* → *Session pooler* → copia la URL (con tu contraseña). Va en `DATABASE_URL`. Las tablas se crean solas en el esquema `tienda`.
-2. **Render**: sube esta carpeta a un repositorio de GitHub → en Render *New → Blueprint* → elige el repo (usa `render.yaml`) → rellena las variables.
-3. Render da una URL tipo `https://tienda-bot.onrender.com`. El bot configura el webhook solo. El panel queda en `/admin`.
-4. El plan gratis de Render se "duerme" tras 15 min sin uso (el primer mensaje tarda ~30 s). Para evitarlo, crea un monitor gratis en uptimerobot.com que visite `https://TU-URL/health` cada 5 minutos.
+## Despliegue con contenedor
+
+`Dockerfile` usa Node 22 y solo copia dependencias y `src`; `.env`, datos locales y pruebas se excluyen de la imagen. `.github/workflows/container.yml` ejecuta pruebas y construye Docker en cada PR a `main`. Al publicar en `main`, sube la imagen a `ghcr.io/oscardavidmoralesflo-lgtm/tienda-bot` con etiqueta de commit y `latest`.
+
+En Northflank, crear un servicio desde una imagen externa y elegir exclusivamente recursos permitidos por Developer Sandbox. Este proyecto se desplegó con una instancia de 0,2 vCPU y 512 MB. En la cuenta utilizada fue necesario verificar una tarjeta, manteniendo el plan gratuito.
+
+Configurar las credenciales como variables privadas autorizadas, `PUBLIC_URL` con la URL HTTPS del servicio, `PORT=3000`, `KEEP_ALIVE=0` y comprobación HTTP de `/health`. Mantener `DATABASE_URL` y `DB_SCHEMA=tienda` para conservar usuarios y saldos. El servidor configura el webhook de Telegram al arrancar.
+
+Si el alojamiento usa una etiqueta de commit fija, publicar en GitHub no cambia automáticamente el servidor: hay que seleccionar y comprobar la imagen nueva. No ejecutar dos instancias contra la base de datos productiva.
+
+Render sigue disponible mediante `render.yaml`, dentro de sus cuotas o con un plan autorizado. Las visitas periódicas no eliminan sus cuotas mensuales gratuitas. Para migrar, detener el alojamiento anterior, restaurar `npm start` si estaba pausado y configurar `PUBLIC_URL` en el destino.
+
+El alojamiento gratuito no financia compras a proveedores. Antes de aceptar pagos, configurar datos reales de recepción y soporte, comprobar saldo mayorista y verificar condiciones del producto. Una prueba con simuladores no prueba una entrega real.
