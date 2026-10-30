@@ -3,7 +3,7 @@ import { InlineKeyboard } from 'grammy';
 import crypto from 'node:crypto';
 import { kokoro } from '../kokoro.js';
 import * as catalog from '../catalog.js';
-import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, getOverride, fmt, fmtS, round4 } from '../pricing.js';
+import { productUnitPrice, productUnitCost, packPrice, gameFromPrice, isHidden, getOverride, fmt, fmtS, round4, copMode } from '../pricing.js';
 import { s } from '../settings.js';
 import { getUser, setState } from '../users.js';
 import { buyProduct, buyGamePack, refreshOrder, askForCode, formatDelivery, sendConfirmationCode } from '../orders.js';
@@ -14,7 +14,7 @@ import { t, errorText, localName } from '../i18n.js';
 import { show, pager, cut, cancelKb, navRow, stockIcon, LINE } from './ui.js';
 
 const PER_PAGE = 8;
-const cur = () => s('currency');
+const cur = () => copMode() ? 'COP' : s('currency');
 const T = (ctx, key, vars) => t(ctx.lang, key, vars);
 const en = (ctx) => ctx.lang === 'en';
 // textos de los proveedores en el idioma del cliente
