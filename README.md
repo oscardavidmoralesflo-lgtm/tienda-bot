@@ -10,8 +10,19 @@ Tu propio bot de Telegram que vende el catálogo de KOKORO SHOP con **tu margen 
 
 ⚠️ Mantén saldo en KOKORO (en @Shop_KOKORO_BOT). Si no alcanza, el bot devuelve el dinero al cliente y te avisa.
 
-## Dos proveedores: KOKORO + Bunny
-El catálogo junta KOKORO y Bunny AI Store. Si un producto está en los dos, el bot muestra solo el **más barato con stock** (y cambia solo si se agota). La lista de productos equivalentes está en `src/catalog-groups.js`. Para activar Bunny pon `BUNNY_API_KEY` (en @bunnytoolss_bot → Bot API). Bunny no permite consultar pedidos: si uno queda sin respuesta, te llega un aviso y lo entregas o reembolsas desde el panel.
+## Proveedores y ganancia protegida
+
+KOKORO y Bunny mantienen sus conexiones existentes. El panel **Proveedores** añade adaptadores para **SafwanTiger, P-AI, HMK y ResellWithMe**, con claves cifradas en la base privada, consulta de saldo y selección de los productos que se publican. Las claves opcionales también pueden configurarse mediante sus variables de entorno en `.env.example`.
+
+Las API de Safwan y P-AI se comprobaron mediante consultas de catálogo autenticadas. HMK y ResellWithMe están implementados contra sus referencias públicas y se prueban con simuladores; requieren una cuenta y clave propias antes de habilitarlos. SubExpress, Fuk y Jero no se anuncian como conectados porque no se verificó una API de compra adecuada.
+
+Precios y stock se refrescan cada 3 minutos. Al pagar se exige una actualización válida y, donde el proveedor lo ofrece, una cotización. Si aumentan el precio o cambian las condiciones del producto, el cliente debe confirmar otra vez. No se agrupan ofertas solo porque compartan nombre: los antiguos grupos mezclaban garantías, plazos o plataformas distintas.
+
+En Ajustes → Precios se configuran mínimo por pedido, margen mínimo sobre venta, costos de cobro/cambio y reserva de incidencias. La protección también se aplica a precios fijos y descuenta una reserva por los máximos vigentes de referidos, ñapa y bonos. Es una **estimación**, no una garantía frente a comisiones desconocidas o cambios de costo posteriores a una cotización no vinculante. Los ajustes existentes se conservan; para arrancar se recomienda mínimo de productos $0,50 y juegos $0,10.
+
+Cada intención de compra tiene una referencia persistida. Una respuesta incierta no provoca otra compra ni un cambio de proveedor. Bunny y Safwan requieren revisión manual de estos casos porque no documentan una consulta de estado utilizable; los demás se concilian mediante lectura. Una entrega parcial tampoco se marca completa automáticamente.
+
+Las conexiones nuevas empiezan apagadas y no publican todo el catálogo. Conectar una clave no financia los pedidos ni acredita autorización de las marcas para revender promociones o cuentas. Se deben comprobar elegibilidad, región y garantía por producto.
 
 ## Funciones del bot (clientes)
 - 🛍 Catálogo de productos digitales con stock en vivo, descuentos por volumen y entrega instantánea

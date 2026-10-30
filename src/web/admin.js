@@ -15,6 +15,9 @@ import { categoryOf, DISPLAY_ORDER, iconOf } from '../categories.js';
 import { esc, fmtDate, STATUS_ES } from '../util.js';
 import { t, userLang } from '../i18n.js';
 import { fmt } from '../pricing.js';
+import { estimatedProfit } from '../pricing.js';
+import { providerNames, clearProviderCache } from '../providers.js';
+import { providersRouter } from './providers.js';
 import { page, loginPage, icon, avatar, salesChart, donut } from './layout.js';
 
 const COOKIE = 'adm';
@@ -48,7 +51,7 @@ const back = (res, url, msg) => res.redirect(`${url}${url.includes('?') ? '&' : 
 const cur = () => s('currency');
 const stat = (label, value, { ic = 'trend', color = 'brand', sub = '', hero = false } = {}) =>
   `<div class="card stat ${hero ? 'hero' : ''}"><div class="split"><span class="k">${label}</span><span class="chip c-${color}">${icon(ic)}</span></div><div class="v num">${value}</div>${sub ? `<div class="d">${sub}</div>` : ''}</div>`;
-const sourceBadge = (src) => (src === 'bunny' ? '<span class="badge b-brand">🐰 Bunny</span>' : '<span class="badge b-info">🏦 KOKORO</span>');
+const sourceBadge = src => `<span class="badge b-info">${esc(providerNames[src]||src||'KOKORO')}</span>`;
 const emptyBox = (emoji, text) => `<div class="empty"><div class="big">${emoji}</div>${text}</div>`;
 
 async function salesSeries(days = 14) {
@@ -134,9 +137,9 @@ export function adminRouter(bot) {
 
     const body = `
       <div class="grid g4">
-        ${stat('Ganancia hoy', `${money(st.profit_today)} <small style="font-size:14px;font-weight:600">${cur()}</small>`, { ic: 'trend', hero: true, sub: `${money(st.revenue_today)} facturado hoy${cop(st.profit_today) ? ' · ≈ ' + cop(st.profit_today) : ''}` })}
+        ${stat('Ganancia bruta hoy', `${money(st.profit_today)} <small style="font-size:14px;font-weight:600">${cur()}</small>`, { ic: 'trend', hero: true, sub: `${money(st.revenue_today)} facturado hoy${cop(st.profit_today) ? ' · ≈ ' + cop(st.profit_today) : ''}` })}
         ${stat('Facturado (7 días)', money(last7.revenue), { ic: 'dollar', color: 'info', sub: `${last7.orders} ventas · ${money(last7.profit)} de ganancia` })}
-        ${stat('Ganancia total', money(st.profit), { ic: 'bag', color: 'ok', sub: `Margen real: ${margin}% · ${st.orders} ventas` })}
+        ${stat('Ganancia bruta total', money(st.profit), { ic: 'bag', color: 'ok', sub: `Margen bruto: ${margin}% · ${st.orders} ventas` })}
         ${stat('Clientes', st.users, { ic: 'users', color: 'brand', sub: `+${st.users_today} hoy` })}
       </div>
 
@@ -264,8 +267,8 @@ export function adminRouter(bot) {
           ${kv('Cantidad', o.quantity)}
           ${kv('Precio de venta', `<b class="num">${money(o.price)} ${cur()}</b>`)}
           ${kv('Costo', `<span class="num">${money(o.cost)} ${cur()}</span>`)}
-          ${kv('Ganancia', `<b class="num ok">+${money(o.price - o.cost)} ${cur()}</b>`)}
-          ${kv('Proveedor', sourceBadge(o.kind === 'bunny' ? 'bunny' : 'kokoro'))}
+          ${kv('Diferencia bruta', `<b class="num ok">+${money(o.price - o.cost)} ${cur()}</b>`)}
+          ${kv('Proveedor', sourceBadge(providerNames[o.kind]?o.kind:'kokoro'))}
           ${kv('ID en el proveedor', `<span class="num">${esc(o.kokoro_order_id || '—')}</span><br><small class="muted">${esc(o.external_order_id)}</small>`)}
           ${kv('Fecha', `${fmtDate(o.created_at)} UTC`)}
           ${input && Object.keys(input).length ? kv('Datos del cliente', `<pre>${esc(JSON.stringify(input, null, 1))}</pre>`) : ''}
@@ -273,7 +276,7 @@ export function adminRouter(bot) {
       <div class="grid" style="gap:16px;align-content:start">
         <div class="card"><h3>${icon('box')} Entrega</h3><p class="sub">Lo que recibió el cliente</p>${o.delivery ? `<pre>${esc(o.delivery)}</pre>` : emptyBox('📭', 'Todavía sin entregar')}</div>
         <div class="card"><h3>${icon('bolt')} Acciones</h3><p class="sub">Gestiona este pedido</p><div class="grid" style="gap:8px">
-          ${o.kind !== 'bunny' ? `<form method="post" action="/admin/orders/${o.id}/refresh"><button class="ghost" style="width:100%">${icon('refresh', 16)} Consultar estado en KOKORO</button></form>` : ''}
+          ${!['bunny','safwan'].includes(o.kind) ? `<form method="post" action="/admin/orders/${o.id}/refresh"><button class="ghost" style="width:100%">${icon('refresh', 16)} Consultar estado en el proveedor</button></form>` : ''}
           ${o.status === 'delivered' ? `<form method="post" action="/admin/orders/${o.id}/resend"><button class="ghost" style="width:100%">${icon('send', 16)} Reenviar entrega al cliente</button></form>` : ''}
           ${!o.refunded ? `<form method="post" action="/admin/orders/${o.id}/refund" onsubmit="return confirm('¿Devolver ${money(o.price)} al saldo del cliente? Esto NO cancela el pedido en el proveedor.')"><button class="badb" style="width:100%">${icon('x', 16)} Reembolsar al cliente</button></form>` : '<span class="badge b-bad">Ya reembolsado</span>'}
         </div></div>
@@ -381,13 +384,13 @@ export function adminRouter(bot) {
     back(res, `/admin/users/${req.params.id}`, ok ? 'Mensaje enviado' : 'No se pudo enviar (¿bloqueó el bot o el HTML es inválido?)');
   });
 
+  r.use('/providers',providersRouter(render));
   // ---------- productos ----------
   r.get('/products', async (req, res) => {
     let products = [];
     let err = '';
     try {
-      if (req.query.fresh === '1') await Promise.allSettled([kokoro.products(true), bunny.products(true)]);
-      products = await catalog.allProducts();
+      products = await catalog.allProducts(req.query.fresh === '1');
     } catch (e) {
       err = e.message;
     }
@@ -401,14 +404,14 @@ export function adminRouter(bot) {
     list.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name) || a.price - b.price);
     const link = (c, sr) => `/admin/products?${new URLSearchParams({ ...(c ? { cat: c } : {}), ...(sr ? { src: sr } : {}) })}`;
     const chips = `<a class="chipf ${!cat ? 'on' : ''}" href="${link('', src)}">Todas (${products.length})</a>${DISPLAY_ORDER.filter((c) => counts[c.key]).map((c) => `<a class="chipf ${cat === c.key ? 'on' : ''}" href="${link(c.key, src)}">${c.icon} ${c.label} (${counts[c.key]})</a>`).join('')}`;
-    const srcChips = `<a class="chipf ${!src ? 'on' : ''}" href="${link(cat, '')}">Ambos</a><a class="chipf ${src === 'kokoro' ? 'on' : ''}" href="${link(cat, 'kokoro')}">🏦 KOKORO</a><a class="chipf ${src === 'bunny' ? 'on' : ''}" href="${link(cat, 'bunny')}">🐰 Bunny</a>`;
+    const srcChips = `<a class="chipf ${!src ? 'on' : ''}" href="${link(cat, '')}">Todos</a>${Object.entries(providerNames).map(([id,name])=>`<a class="chipf ${src===id?'on':''}" href="${link(cat,id)}">${esc(name)}</a>`).join('')}`;
     const backUrl = link(cat, src);
     const rows = list.map((p) => {
       const o = getOverride(p.id) || {};
       const fid = `f_${crypto.createHash('md5').update(p.id).digest('hex').slice(0, 10)}`;
       const c = categoryOf(p.name);
       const price = productUnitPrice(p);
-      const profit = price - Number(p.price);
+      const profit = estimatedProfit(p.price,price);
       return `<tr style="${p.winner ? '' : 'opacity:.5'}">
         <td class="wrap"><div class="prod"><span style="font-size:18px">${iconOf(p.name)}</span><div><b>${esc(p.name)}</b>${p.group ? `<div style="font-size:12px" class="${p.winner ? 'ok' : 'muted'}">${p.winner ? '✅ Visible en el bot' : '⏸ Oculto: hay uno más barato'}${p.displayName ? ` como “${esc(p.group)}”` : ''}</div>` : ''}<div class="row" style="gap:6px;margin-top:5px"><span class="badge b-muted">${c.icon} ${c.label}</span>${sourceBadge(p.source)}</div></div></div></td>
         <td class="r num">${p.stock > 0 ? (p.stock >= 999 ? '∞' : p.stock) : '<span class="badge b-bad">Agotado</span>'}</td>
@@ -429,7 +432,7 @@ export function adminRouter(bot) {
       <tbody>${rows || `<tr><td colspan="9">${emptyBox('📦', 'No hay productos con ese filtro')}</td></tr>`}</tbody></table></div></div>`;
     const actions = `<a class="btn ghost" href="/admin/settings#precios">${icon('settings', 16)} Márgenes</a><a class="btn" href="/admin/products?fresh=1">${icon('refresh', 16)} Recargar precios</a>`;
     await render(req, res, 'Productos', body, {
-      subtitle: `KOKORO + Bunny unidos: cuando un producto está en ambos, el bot muestra solo el más barato con stock. Margen automático por tramos (${esc(s('price_tiers_products') || s('markup_products') + '%')}).`,
+      subtitle: 'Costos y stock cada 3 minutos. Modalidades y garantías diferentes por separado; ganancia mínima protegida, incluidos precios fijos.',
       actions,
     });
   });
@@ -540,7 +543,14 @@ export function adminRouter(bot) {
     ]],
     ['precios', 'trend', 'Precios y márgenes', 'Cómo se calcula tu ganancia', [
       ['price_tiers_products', 'Margen por tramos — productos', 'text', 'Formato COSTO_MÁX:%. Ej: 1:60,3:40,10:30,30:20,*:12 = hasta 1 USD ganas 60 %, hasta 3 USD 40 %… el resto 12 %. Vacío = margen general.'],
-      ['min_profit_products', 'Ganancia mínima por pedido — productos (USD)', 'number', 'Para que lo muy barato también deje ganancia. Ej: 0.20'],
+      ['min_profit_products', 'Ganancia mínima estimada por pedido — productos (USD)', 'number', 'Recomendación inicial: 0.50. Se protege también al usar precios fijos.'],
+      ['profit_protection','Proteger ganancia mínima (1 = sí, 0 = no)','text','Recomendado 1. Eleva precios fijos insuficientes y bloquea compras con margen insuficiente.'],
+      ['protect_loyalty_costs','Reservar referidos, ñapa y bonos (1 = sí)','text','Reserva el máximo configurado para no confundir diferencia bruta con ganancia.'],
+      ['min_margin_products','Margen mínimo estimado sobre venta — productos (%)','number'],
+      ['min_margin_games','Margen mínimo estimado sobre venta — juegos (%)','number'],
+      ['payment_cost_percent','Costo de cobro asumido por la tienda (%)','number'],
+      ['supplier_cost_percent','Recarga y cambio de proveedor (%)','number'],
+      ['risk_reserve_percent','Reserva para incidencias sobre venta (%)','number'],
       ['price_tiers_games', 'Margen por tramos — juegos, gift cards y keys', 'text', 'Las recargas de juegos son muy competidas: márgenes más bajos. Ej: 5:20,20:12,*:8'],
       ['min_profit_games', 'Ganancia mínima por pedido — juegos (USD)', 'number'],
       ['markup_products', 'Margen general productos (%)', 'number', 'Solo se usa si dejas vacíos los tramos.'],
@@ -615,12 +625,13 @@ export function adminRouter(bot) {
       values[k] = v;
     }
     values.maintenance = req.body.maintenance ? '1' : '0';
-    await saveSettings(values);
+    try {await saveSettings(values);}catch(e){return back(res,'/admin/settings',e.message);}
     back(res, '/admin/settings', 'Ajustes guardados');
   });
   r.post('/cache', async (req, res) => {
     clearCache();
     bunny.clearCache();
+    clearProviderCache();
     await warmUp().catch(() => {});
     back(res, String(req.get('referer') || '').includes('/admin/settings') ? '/admin/settings' : '/admin', 'Catálogo actualizado desde los proveedores');
   });

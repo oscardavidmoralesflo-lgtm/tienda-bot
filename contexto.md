@@ -1,5 +1,13 @@
 # Contexto del proyecto: Nova Plus (bot de Telegram revendedor)
 
+> **Actualización 2026-10-30:** Se añadieron `provider-settings.js`, `providers.js` y `/admin/providers`: credenciales cifradas y adaptadores SafwanTiger/P-AI/HMK/ResellWithMe. Safwan y P-AI tienen claves emitidas guardadas solo en `.env` local y catálogos leídos; la configuración de producción debe guardarse desde el panel o Render, sin publicar claves. HMK/RWM requieren credenciales de sus cuentas.
+>
+> Los antiguos grupos automáticos se retiraron porque mezclaban garantías, duraciones y Vibi/ElevenLabs. `GROUPS` queda reservado para equivalencias que se revisen de verdad; `LEGACY_GROUPS` conserva la referencia anterior. Se bloquea el pago con catálogo no actualizado, subida de precio sin nueva confirmación y margen insuficiente. El mínimo estimado protege también precios fijos e incluye reservas configurables para comisiones/fidelización. Recomendación inicial: productos $0,50, juegos $0,10; los ajustes existentes no se sobrescriben al arrancar.
+>
+> Safwan y Bunny no se reintentan con resultado incierto; la revisión se hace en el panel. Las entregas parciales permanecen pendientes. Los callbacks de confirmación se reclaman atómicamente para evitar doble compra. Las compras de pruebas usan servidores simulados: nunca ejecutar `npm start` local contra el bot productivo para probar el panel.
+>
+> El resto de este documento describe la base previa. Las afirmaciones anteriores sobre «más barato sin duplicados» deben interpretarse según esta actualización. El estado real del despliegue y financiación se comprueba en Render y en cada proveedor.
+
 > Documento para retomar el proyecto con otra IA o desarrollador. **No contiene contraseñas ni tokens**: esos están solo en `.env` (local) y en las variables de entorno de Render.
 
 ## 1. Qué es

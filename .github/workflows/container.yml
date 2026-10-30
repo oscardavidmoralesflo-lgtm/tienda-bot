@@ -1,0 +1,41 @@
+name: Verify and publish Nova Plus container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run tests in Node 22
+        run: docker run --rm -v "$PWD:/app" -w /app node:22-bookworm-slim sh -c 'npm ci && npm test'
+      - name: Build image without production credentials
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" .
+      - name: Publish image from main
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+          docker logout ghcr.io

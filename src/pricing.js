@@ -35,6 +35,42 @@ export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 10
 const ceil2 = (n) => Math.ceil(Math.round(n * 100 * 1000) / 1000) / 100;
 export const money = (n) => Number(n || 0).toFixed(2);
 
+const nonnegative = key => Math.max(0, num(key));
+function largestPct(text) {
+  return Math.max(0,...String(text||'').split(',').map(x=>Number(x.split(':')[1])).filter(Number.isFinite));
+}
+export function profitPolicy(kind = 'products') {
+  const loyalty = setting('protect_loyalty_costs') === '1'
+    ? nonnegative('referral_percent') + largestPct(setting('cashback_tiers')) + largestPct(setting('recharge_bonus')) : 0;
+  return {
+    protected:setting('profit_protection') !== '0',
+    salePct:nonnegative('payment_cost_percent') + nonnegative('risk_reserve_percent') + loyalty,
+    supplierPct:nonnegative('supplier_cost_percent'),
+    minProfit:nonnegative(kind==='games'?'min_profit_games':'min_profit_products'),
+    marginPct:nonnegative(kind==='games'?'min_margin_games':'min_margin_products'),
+  };
+}
+export function minimumSale(cost, kind = 'products', qty = 1) {
+  const p=profitPolicy(kind),q=Math.max(1,qty),c=Number(cost)*(1+p.supplierPct/100);
+  if(!Number.isFinite(c)||c<0)throw new Error('Costo inválido');
+  if(!p.protected)return ceil2(Math.max(Number(cost)+p.minProfit/q,0.01));
+  if(p.salePct+p.marginPct>=100)throw new Error('Comisiones y margen deben sumar menos de 100%.');
+  return ceil2(Math.max((c+p.minProfit/q)/(1-p.salePct/100),c/(1-(p.salePct+p.marginPct)/100),0.01));
+}
+export function estimatedProfit(cost, sale, kind = 'products') {
+  const p=profitPolicy(kind);
+  return round4(Number(sale)*(1-p.salePct/100)-Number(cost)*(1+p.supplierPct/100));
+}
+export function protectsProfit(cost, sale, kind = 'products', qty = 1) {
+  const p=profitPolicy(kind);
+  if(!p.protected)return Number(sale)>=Number(cost);
+  const net=estimatedProfit(cost,sale,kind);
+  return net+0.0001>=p.minProfit && net+0.0001>=Number(sale)*p.marginPct/100;
+}
+function protectedPrice(cost, requested, kind, qty = 1) {
+  return finalize(Math.max(Number(requested),minimumSale(cost,kind,qty)));
+}
+
 function applyMarkup(cost, markup, minProfit = 0) {
   return Math.max(ceil2(Math.max(cost * (1 + markup / 100), cost + minProfit)), 0.01);
 }
@@ -76,21 +112,21 @@ export function productUnitPrice(product, qty = 1) {
   if (o?.fixed_price != null) {
     // precio fijo por unidad; los descuentos por volumen se aplican en la misma proporción
     const ratio = Number(product.price) > 0 ? cost / Number(product.price) : 1;
-    return finalize(round2(Number(o.fixed_price) * ratio));
+    return protectedPrice(cost, round2(Number(o.fixed_price) * ratio), 'products', qty);
   }
   const markup = o?.markup != null ? Number(o.markup) : tierPct(cost, 'products');
   // la ganancia mínima es por pedido: en compras por volumen se reparte entre las unidades
-  return finalize(applyMarkup(cost, markup, num('min_profit_products') / Math.max(1, qty)));
+  return protectedPrice(cost, applyMarkup(cost, markup, num('min_profit_products') / Math.max(1, qty)), 'products', qty);
 }
 
 // ---- Juegos (packs) ----
 export function packPrice(pack, gameId) {
   const po = getOverride(pack.id);
-  if (po?.fixed_price != null) return finalize(round2(po.fixed_price));
+  if (po?.fixed_price != null) return protectedPrice(Number(pack.price),round2(po.fixed_price),'games');
   const go = getOverride(gameId || pack.game_id);
   const cost = Number(pack.price);
   const markup = po?.markup != null ? Number(po.markup) : go?.markup != null ? Number(go.markup) : tierPct(cost, 'games');
-  return finalize(applyMarkup(cost, markup, num('min_profit_games')));
+  return protectedPrice(cost,applyMarkup(cost, markup, num('min_profit_games')),'games');
 }
 
 export function gameFromPrice(game) {
@@ -98,7 +134,7 @@ export function gameFromPrice(game) {
   const go = getOverride(game.id);
   const cost = Number(game.from_price);
   const markup = go?.markup != null ? Number(go.markup) : tierPct(cost, 'games');
-  return finalize(applyMarkup(cost, markup, num('min_profit_games')));
+  return protectedPrice(cost,applyMarkup(cost, markup, num('min_profit_games')),'games');
 }
 
 // Equivalente en pesos colombianos (redondeado hacia arriba a 100 COP). Vacío si no hay tasa.

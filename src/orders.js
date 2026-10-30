@@ -6,7 +6,8 @@ import { kokoro, KokoroError } from './kokoro.js';
 import { bunny, BunnyError, balanceOf } from './bunny.js';
 import { credit, getUser } from './users.js';
 import { num, s } from './settings.js';
-import { money, round2, round4, fmt } from './pricing.js';
+import { money, round2, round4, fmt, protectsProfit } from './pricing.js';
+import { isExtraProvider, quoteExtra, purchaseExtra, normalizedExtraOrder, readExtraOrder, providerNames, ProviderError } from './providers.js';
 import { esc } from './util.js';
 import { t, errorText, localName, userLang } from './i18n.js';
 import { levelOf, durationDays } from './loyalty.js';
@@ -136,14 +137,24 @@ export async function sendRenewals() {
 
 // ===================== PRODUCTOS DIGITALES =====================
 export async function buyProduct({ userId, product, quantity, unitPrice, activationData }) {
-  const cost = round2(Number(product._unitCost ?? product.price) * quantity);
+  let cost = round4(Number(product._unitCost ?? product.price) * quantity);
   const price = round4(unitPrice * quantity);
   const isBunny = product.source === 'bunny';
+  const extra=isExtraProvider(product.source);
+  const lang=await userLang(userId);
+  if(!Number.isSafeInteger(quantity)||quantity<1||!Number.isFinite(price)||price<=0||!Number.isFinite(cost)||cost<0)return {ok:false,reason:'price',message:t(lang,'quote_invalid')};
+  let quote;
+  if(extra) {
+    try { quote=await quoteExtra(product.source,product,quantity,activationData);cost=quote.cost; }
+    catch(e) { return {ok:false,reason:'quote',message:t(lang,'quote_unavailable')}; }
+  }
+  if(!protectsProfit(cost,price,'products',quantity))return {ok:false,reason:'price',message:t(lang,'price_changed')};
   const o = await createOrder({
-    userId, kind: isBunny ? 'bunny' : 'product', productId: product.id, productName: product.name, quantity, cost, price,
-    input: activationData ? { activation_data: activationData } : {},
+    userId, kind: extra ? product.source : isBunny ? 'bunny' : 'product', productId: product.id, productName: product.name, quantity, cost, price,
+    input: { ...(activationData ? { activation_data: activationData } : {}), ...(quote?.quoteId ? {quote_id:quote.quoteId} : {}) },
   });
   if (!o) return { ok: false, reason: 'balance' };
+  if(extra)return buyFromExtra(o,product,quote,activationData);
   if (isBunny) return buyFromBunny(o, product, quantity, unitPrice);
 
   const body = { product_id: product.id, quantity, external_order_id: o.external_order_id };
@@ -163,6 +174,38 @@ export async function buyProduct({ userId, product, quantity, unitPrice, activat
   }
   const d = await markDelivered(o, delivery, res.order_id);
   return { ok: true, order: d || o };
+}
+
+async function applyExtraOrder(o,response,notify=false) {
+  const r=normalizedExtraOrder(o.kind,response);
+  const fields={};
+  if(r.id)fields.kokoro_order_id=String(r.id);
+  if(r.cost!=null&&r.cost>=0)fields.cost=r.cost;
+  if(Object.keys(fields).length)o=await update(o.id,fields);
+  if(r.refunded){await refundOrder(o.id,t(await userLang(o.user_id),'err_provider_cancelled'));return one('SELECT * FROM orders WHERE id=$1',[o.id]);}
+  if(r.delivered) {
+    if(r.itemCount!=null&&r.itemCount<o.quantity) {
+      await notifier.admins(`⚠️ Pedido #${o.id}: entrega parcial de ${esc(providerNames[o.kind])}. Revisa el pedido antes de completarlo o reembolsarlo.`);
+      return update(o.id,{status:'processing',delivery:r.delivery,failure_reason:'Entrega parcial; revisión manual necesaria'});
+    }
+    const d=await markDelivered(o,r.delivery,r.id);
+    if(d&&notify)await notifyDelivered(d);
+    if(!protectsProfit(Number(o.cost),Number(o.price),'products',o.quantity))await notifier.admins(`⚠️ Pedido #${o.id}: ${esc(providerNames[o.kind])} cobró un costo diferente de la cotización. Revisa el margen en el panel.`);
+    return d||o;
+  }
+  return update(o.id,{status:'processing',failure_reason:r.status?`Estado proveedor: ${r.status}`:'Esperando confirmación de entrega'});
+}
+async function buyFromExtra(o,product,quote,activationData) {
+  try { return {ok:true,order:await applyExtraOrder(o,await purchaseExtra(o.kind,o,product,quote,activationData))}; }
+  catch(e) {
+    if(e instanceof ProviderError&&e.definitelyNotCharged) {
+      const message=t(await userLang(o.user_id),'quote_unavailable');
+      await refundOrder(o.id,message);return {ok:false,reason:'api',message,order:await one('SELECT * FROM orders WHERE id=$1',[o.id])};
+    }
+    const p=await update(o.id,{status:'processing',...(e.orderId?{kokoro_order_id:String(e.orderId)}:{}),failure_reason:'Respuesta incierta del proveedor: revisar la misma orden; no volver a comprar.'});
+    await notifier.admins(`⚠️ Pedido #${o.id} (${esc(providerNames[o.kind])}) pendiente de conciliación. No se volvió a comprar ni se cambió de proveedor. Referencia: <code>${esc(o.external_order_id)}</code>.`);
+    return {ok:true,processing:true,order:p};
+  }
 }
 
 // ===================== BUNNY =====================
@@ -226,6 +269,7 @@ export async function deliverManually(orderId, delivery) {
 export async function buyGamePack({ userId, pack, game, unitPrice, quantity = 1, fields, country }) {
   const cost = round2(Number(pack.price) * quantity);
   const price = round4(unitPrice * quantity);
+  if(!Number.isSafeInteger(quantity)||quantity<1||!Number.isFinite(cost)||!Number.isFinite(price)||!protectsProfit(cost,price,'games',quantity))return {ok:false,reason:'price',message:t(await userLang(userId),'price_changed')};
   const name = `${game?.name || pack.name} — ${pack.pack || pack.name}${quantity > 1 ? ` x${quantity}` : ''}`;
   const o = await createOrder({
     userId, kind: 'game', productId: pack.id, productName: name, quantity, cost, price,
@@ -340,6 +384,11 @@ async function handlePurchaseError(o, e) {
 // ===================== VERIFICACIÓN DE ESTADO =====================
 export async function refreshOrder(o) {
   if (o.kind === 'bunny') return o; // Bunny no tiene consulta de pedidos: lo resuelve el admin
+  if(isExtraProvider(o.kind)) {
+    if(o.status==='delivered'||o.refunded)return o;
+    try { const r=await readExtraOrder(o);return r?await applyExtraOrder(o,r,true):o; }
+    catch { return o; } // Un 404/timeout no prueba que se haya reembolsado.
+  }
   try {
     if (o.kind === 'game') {
       const r = await kokoro.gameOrder(o.external_order_id);
@@ -378,7 +427,7 @@ async function maybeRefundMissing(o) {
 
 export async function pollOpenOrders() {
   const open = await many(
-    `SELECT * FROM orders WHERE status IN ('pending','processing','action_required') AND kind <> 'bunny'
+    `SELECT * FROM orders WHERE status IN ('pending','processing','action_required') AND kind NOT IN ('bunny','safwan')
      AND created_at > now() - interval '3 days' ORDER BY id LIMIT 30`,
   );
   for (const o of open) {
