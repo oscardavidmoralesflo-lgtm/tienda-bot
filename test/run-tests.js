@@ -4,6 +4,8 @@ import { rmSync } from 'node:fs';
 import { startMock } from './mock-kokoro.js';
 
 process.env.KOKORO_BASE_URL = 'http://localhost:4010';
+process.env.NODE_ENV = 'test';
+process.env.SESSION_SECRET = 'test-provider-encryption-secret';
 process.env.KOKORO_API_TOKEN = 'sk_test';
 process.env.DATABASE_URL = '';
 process.env.PUBLIC_URL = '';
@@ -30,7 +32,7 @@ const { kokoro } = await import('../src/kokoro.js');
 await initDb();
 await loadSettings();
 // las pruebas de cobros usan un margen fijo simple (20 % / 15 %); los tramos se prueban al final
-await saveSettings({ price_tiers_products: '', price_tiers_games: '', min_profit_products: '0', min_profit_games: '0' });
+await saveSettings({ price_tiers_products: '', price_tiers_games: '', min_profit_products: '0', min_profit_games: '0', profit_protection:'0', protect_loyalty_costs:'0', risk_reserve_percent:'0', min_margin_products:'0', min_margin_games:'0' });
 await pricing.loadOverrides();
 const sent = [];
 orders.setNotifier({ user: async (id, t) => sent.push([id, t]), admins: async (t) => sent.push(['admin', t]) });
@@ -134,14 +136,14 @@ await test('compras simultáneas no dejan saldo negativo', async () => {
 });
 
 const catalog = await import('../src/catalog.js');
-await test('catálogo unificado: gana el más barato con stock y sin duplicados', async () => {
+await test('catálogo: no agrupa modalidades o garantías distintas por nombre', async () => {
   const list = await catalog.products();
   const ids = list.map((p) => p.id);
   assert.ok(ids.includes('bunny:57'));            // Gemini en Bunny (1.50) le gana a KOKORO (2.50)
-  assert.ok(!ids.includes('gemini_pro_18m'));
-  assert.equal(list.find((p) => p.id === 'bunny:57').name, 'Gemini AI PRO 18 Meses');
+  assert.ok(ids.includes('gemini_pro_18m'));
+  assert.equal(list.find((p) => p.id === 'bunny:57').name, 'Link Gemini Pro 18 Month Quality Links');
   assert.ok(ids.includes('code_spotify_90d'));    // Spotify en Bunny está agotado -> KOKORO
-  assert.ok(!ids.includes('bunny:11'));
+  assert.ok(ids.includes('bunny:11')); // disponible como ficha agotada, sin reemplazar una variante distinta
   assert.ok(!ids.includes('prueba_bot'));         // productos internos ocultos
   assert.equal(list.find((p) => p.id === 'bunny:65').stock, 999); // stock ilimitado
   assert.equal(new Set(list.map((p) => p.name)).size, list.length);
@@ -412,6 +414,7 @@ await test('Binance: el cliente pega el Order ID / TxID y se acredita solo, sin 
   await saveSettings({ cop_rate: '0' });
 });
 
+await (await import('./provider-tests.js')).runProviderTests({test,users,orders,pricing,saveSettings,one});
 console.log(`\n${pass} pruebas OK`);
 mock.close();
 process.exit(0);
