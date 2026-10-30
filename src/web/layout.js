@@ -41,6 +41,7 @@ const NAV = [
   ]],
   ['Catálogo', [
     ['/admin/products', 'box', 'Productos'],
+    ['/admin/providers', 'link', 'Proveedores'],
     ['/admin/games', 'game', 'Juegos y gift cards'],
   ]],
   ['Marketing', [
