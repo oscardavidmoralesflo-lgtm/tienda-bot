@@ -3,6 +3,8 @@ import { many, query } from './db.js';
 // Valores por defecto. Todo se puede cambiar desde el panel de admin (Ajustes).
 export const DEFAULTS = {
   shop_name: 'Nova Plus',
+  // 'winners' = solo la vitrina de productos ganadores (src/winners.js) + los destacados ⭐; 'all' = todo el catálogo
+  catalog_mode: 'winners',
   currency: 'USDT',
   markup_products: '20',   // % general (solo si no hay tramos)
   markup_games: '15',

@@ -12,6 +12,7 @@ import { esc, tgHtml, ref, deref } from '../util.js';
 import { DISPLAY_ORDER, CAT_BY_KEY, categoryOf, iconOf, catLabel } from '../categories.js';
 import { t, errorText, localName } from '../i18n.js';
 import { show, pager, cut, cancelKb, navRow, stockIcon, LINE } from './ui.js';
+import { curate, winnersMode, winnerSlot, WINNERS, TOP_ORDER } from '../winners.js';
 
 const PER_PAGE = 8;
 const cur = () => copMode() ? 'COP' : s('currency');
@@ -23,9 +24,10 @@ const termsOf = p => crypto.createHash('sha256').update(JSON.stringify([p.id,p.n
 
 // ===================== PRODUCTOS =====================
 async function visibleProducts() {
-  const list = await catalog.products();
+  let list = (await catalog.products()).filter((p) => !isHidden(p.id));
+  // Modo vitrina: solo los productos ganadores (el más barato con stock de cada uno) y los ⭐
+  if (winnersMode()) list = curate(list, { priceOf: (p) => productUnitPrice(p), isFeatured: (id) => !!getOverride(id)?.featured });
   return list
-    .filter((p) => !isHidden(p.id))
     .sort((a, b) => (b.stock > 0) - (a.stock > 0) || a.name.localeCompare(b.name));
 }
 
@@ -72,9 +74,7 @@ export async function bestSellers(limit = 5) {
   ).catch(() => []);
   for (const r of sold) add(byName.get(r.product_name));
   for (const p of inStock) if (getOverride(p.id)?.featured) add(p);
-  for (const re of [/^gemini ai pro 18/i, /^chatgpt plus 1 mes/i, /^capcut pro team/i, /^canva pro edu/i, /^youtube premium 3/i, /^spotify premium 3/i, /^prime video 6/i, /^netflix/i]) {
-    add(inStock.find((p) => re.test(p.name)));
-  }
+  for (const key of TOP_ORDER) add(inStock.find((p) => p.slot === key || winnerSlot(p.id)?.key === key));
   return picked;
 }
 
@@ -91,6 +91,9 @@ async function findProduct(key, fresh = false) {
   if (!id) return null;
   const p = await catalog.findProduct(id, fresh);
   if (!p || isHidden(p.id)) return null;
+  // En modo vitrina el producto se muestra y se registra con el nombre claro de su ranura
+  const slot = winnersMode() ? winnerSlot(p.id) : null;
+  if (slot) return { ...p, name: slot.name, slot: slot.key };
   return p.displayName ? { ...p, name: p.displayName } : p;
 }
 

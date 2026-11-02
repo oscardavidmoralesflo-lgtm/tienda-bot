@@ -414,6 +414,33 @@ await test('Binance: el cliente pega el Order ID / TxID y se acredita solo, sin 
   await saveSettings({ cop_rate: '0' });
 });
 
+await test('vitrina de ganadores: una oferta por producto, la más barata con stock, más los destacados', async () => {
+  const { curate, WINNERS, winnersMode } = await import('../src/winners.js');
+  const price = (p) => p.price;
+  const list = [
+    { id: 'bunny:84', name: 'x', price: 3.99, stock: 5 },
+    { id: '2b9cc107-77cf-4565-99df-932da1044cc2', name: 'y', price: 8.5, stock: 50 },
+    { id: 'code_spotify_90d', name: 'z', price: 1.5, stock: 10 },
+    { id: 'bunny:11', name: 'w', price: 1, stock: 0 },
+    { id: 'random_product', name: 'Producto raro', price: 1, stock: 9 },
+    { id: 'my_star', name: 'Mi destacado', price: 2, stock: 3 },
+  ];
+  const out = curate(list, { priceOf: price, isFeatured: (id) => id === 'my_star' });
+  const gpt = out.find((p) => p.slot === 'gpt_eco');
+  assert.equal(gpt.id, 'bunny:84'); // la opción más barata
+  assert.equal(gpt.name, WINNERS.find((w) => w.key === 'gpt_eco').name);
+  assert.equal(out.find((p) => p.slot === 'spotify_3m').id, 'code_spotify_90d'); // la más barata está agotada
+  assert.ok(!out.some((p) => p.id === 'random_product')); // fuera de la vitrina
+  assert.ok(out.some((p) => p.id === 'my_star')); // los destacados sí se muestran
+  assert.ok(!out.some((p) => p.slot === 'disney_espn')); // sin oferta = no aparece
+  const ids = WINNERS.flatMap((w) => w.ids);
+  assert.equal(new Set(ids).size, ids.length); // sin repetir productos entre ranuras
+  assert.ok(winnersMode());
+  await saveSettings({ catalog_mode: 'all' });
+  assert.ok(!winnersMode());
+  await saveSettings({ catalog_mode: 'winners' });
+});
+
 await (await import('./provider-tests.js')).runProviderTests({test,users,orders,pricing,saveSettings,one});
 console.log(`\n${pass} pruebas OK`);
 mock.close();

@@ -19,6 +19,8 @@ import { estimatedProfit } from '../pricing.js';
 import { providerNames, clearProviderCache } from '../providers.js';
 import { providersRouter } from './providers.js';
 import { page, loginPage, icon, avatar, salesChart, donut } from './layout.js';
+import { curate, winnersMode, winnerSlot, WINNERS } from '../winners.js';
+import { isHidden } from '../pricing.js';
 
 const COOKIE = 'adm';
 const SESSION_HOURS = 24 * 7;
@@ -401,9 +403,14 @@ export function adminRouter(bot) {
     let list = products;
     if (cat) list = list.filter((p) => categoryOf(p.name).key === cat);
     if (src) list = list.filter((p) => p.source === src);
+    // Vitrina: qué oferta de cada ranura ve hoy el cliente
+    const shownIds = new Set(curate(products.filter((p) => p.winner && !isHidden(p.id)), { priceOf: (p) => productUnitPrice(p), isFeatured: (id) => !!getOverride(id)?.featured }).map((p) => p.id));
+    const vit = req.query.vit === '1';
+    if (vit) list = list.filter((p) => winnerSlot(p.id) || getOverride(p.id)?.featured);
     list.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name) || a.price - b.price);
     const link = (c, sr) => `/admin/products?${new URLSearchParams({ ...(c ? { cat: c } : {}), ...(sr ? { src: sr } : {}) })}`;
-    const chips = `<a class="chipf ${!cat ? 'on' : ''}" href="${link('', src)}">Todas (${products.length})</a>${DISPLAY_ORDER.filter((c) => counts[c.key]).map((c) => `<a class="chipf ${cat === c.key ? 'on' : ''}" href="${link(c.key, src)}">${c.icon} ${c.label} (${counts[c.key]})</a>`).join('')}`;
+    const vitCount = products.filter((p) => winnerSlot(p.id) || getOverride(p.id)?.featured).length;
+    const chips = `<a class="chipf ${req.query.vit === '1' ? 'on' : ''}" href="/admin/products?vit=1">🏆 Vitrina (${vitCount})</a><a class="chipf ${!cat && req.query.vit !== '1' ? 'on' : ''}" href="${link('', src)}">Todas (${products.length})</a>${DISPLAY_ORDER.filter((c) => counts[c.key]).map((c) => `<a class="chipf ${cat === c.key ? 'on' : ''}" href="${link(c.key, src)}">${c.icon} ${c.label} (${counts[c.key]})</a>`).join('')}`;
     const srcChips = `<a class="chipf ${!src ? 'on' : ''}" href="${link(cat, '')}">Todos</a>${Object.entries(providerNames).map(([id,name])=>`<a class="chipf ${src===id?'on':''}" href="${link(cat,id)}">${esc(name)}</a>`).join('')}`;
     const backUrl = link(cat, src);
     const rows = list.map((p) => {
@@ -412,14 +419,16 @@ export function adminRouter(bot) {
       const c = categoryOf(p.name);
       const price = productUnitPrice(p);
       const profit = estimatedProfit(p.price,price);
-      return `<tr style="${p.winner ? '' : 'opacity:.5'}">
-        <td class="wrap"><div class="prod"><span style="font-size:18px">${iconOf(p.name)}</span><div><b>${esc(p.name)}</b>${p.group ? `<div style="font-size:12px" class="${p.winner ? 'ok' : 'muted'}">${p.winner ? '✅ Visible en el bot' : '⏸ Oculto: hay uno más barato'}${p.displayName ? ` como “${esc(p.group)}”` : ''}</div>` : ''}<div class="row" style="gap:6px;margin-top:5px"><span class="badge b-muted">${c.icon} ${c.label}</span>${sourceBadge(p.source)}</div></div></div></td>
+      const slot = winnerSlot(p.id);
+      const vitTag = slot ? `<div style="font-size:12px" class="${shownIds.has(p.id) ? 'ok' : 'muted'}">🏆 Vitrina: ${esc(slot.name)} · ${shownIds.has(p.id) ? 'se muestra (mejor precio con stock)' : 'en espera (otra opción es más barata o no hay stock)'}</div>` : (o.featured ? `<div style="font-size:12px" class="ok">⭐ Destacado: se muestra en la vitrina</div>` : '');
+      return `<tr style="${p.winner && (!winnersMode() || shownIds.has(p.id)) ? '' : 'opacity:.5'}">
+        <td class="wrap"><div class="prod"><span style="font-size:18px">${iconOf(p.name)}</span><div><b>${esc(p.name)}</b>${p.group ? `<div style="font-size:12px" class="${p.winner ? 'ok' : 'muted'}">${p.winner ? '✅ Visible en el bot' : '⏸ Oculto: hay uno más barato'}${p.displayName ? ` como “${esc(p.group)}”` : ''}</div>` : ''}${vitTag}<div class="row" style="gap:6px;margin-top:5px"><span class="badge b-muted">${c.icon} ${c.label}</span>${sourceBadge(p.source)}</div></div></div></td>
         <td class="r num">${p.stock > 0 ? (p.stock >= 999 ? '∞' : p.stock) : '<span class="badge b-bad">Agotado</span>'}</td>
         <td class="r num muted">${money(p.price)}</td>
         <td class="r num"><b>${money(price)}</b><div class="ok" style="font-size:12px">+${money(profit)}</div></td>
         <td><input form="${fid}" name="markup" class="in-sm num" style="width:70px" value="${o.markup ?? ''}" placeholder="${tierPct(Number(p.price), 'products')}%" title="Margen % (vacío = automático por tramos)"></td>
         <td><input form="${fid}" name="fixed_price" class="in-sm num" style="width:76px" value="${o.fixed_price ?? ''}" placeholder="—" title="Precio fijo"></td>
-        <td><label class="switch" title="Destacar en Más vendidos"><input form="${fid}" type="checkbox" name="featured" ${o.featured ? 'checked' : ''}></label></td>
+        <td><label class="switch" title="Mostrar en la vitrina y destacar en Más vendidos"><input form="${fid}" type="checkbox" name="featured" ${o.featured ? 'checked' : ''}></label></td>
         <td><label class="switch" title="Ocultar del bot"><input form="${fid}" type="checkbox" name="hidden" ${o.hidden ? 'checked' : ''}></label></td>
         <td><form id="${fid}" method="post" action="/admin/overrides" style="margin:0"><input type="hidden" name="item_id" value="${esc(p.id)}"><input type="hidden" name="kind" value="product"><input type="hidden" name="name" value="${esc(p.name)}"><input type="hidden" name="back" value="${esc(backUrl)}"><button class="sm">Guardar</button></form></td></tr>`;
     }).join('');
@@ -428,11 +437,13 @@ export function adminRouter(bot) {
       ${catalog.bunnyStatus().error ? `<div class="card" style="margin-bottom:16px"><b class="warn">Bunny no respondió:</b> ${esc(catalog.bunnyStatus().error)}</div>` : ''}
       <div class="card" style="margin-bottom:16px"><div class="chips" style="margin-bottom:12px">${chips}</div><div class="split" style="flex-wrap:wrap"><div class="chips">${srcChips}</div>
         <div class="searchbox">${icon('search', 16)}<input data-filter="#ptable" placeholder="Filtrar al instante…"></div></div></div>
-      <div class="card"><div class="tablewrap"><table id="ptable"><thead><tr><th>Producto</th><th class="r">Stock</th><th class="r">Costo</th><th class="r">Tu precio</th><th>Margen</th><th>Precio fijo</th><th>⭐</th><th>Ocultar</th><th></th></tr></thead>
+      <div class="card"><div class="tablewrap"><table id="ptable"><thead><tr><th>Producto</th><th class="r">Stock</th><th class="r">Costo</th><th class="r">Tu precio</th><th>Margen</th><th>Precio fijo</th><th title="Destacar: se muestra en la vitrina y sube en Más vendidos">⭐</th><th>Ocultar</th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan="9">${emptyBox('📦', 'No hay productos con ese filtro')}</td></tr>`}</tbody></table></div></div>`;
     const actions = `<a class="btn ghost" href="/admin/settings#precios">${icon('settings', 16)} Márgenes</a><a class="btn" href="/admin/products?fresh=1">${icon('refresh', 16)} Recargar precios</a>`;
     await render(req, res, 'Productos', body, {
-      subtitle: 'Costos y stock cada 3 minutos. Modalidades y garantías diferentes por separado; ganancia mínima protegida, incluidos precios fijos.',
+      subtitle: winnersMode()
+        ? `Modo vitrina: el bot muestra ${shownIds.size} productos ganadores (de ${WINNERS.length} ranuras) al mejor precio con stock, más tus ⭐. Costos y stock cada 3 minutos.`
+        : 'Catálogo completo. Costos y stock cada 3 minutos; ganancia mínima protegida, incluidos precios fijos.',
       actions,
     });
   });
@@ -536,6 +547,7 @@ export function adminRouter(bot) {
   const SECTIONS = [
     ['tienda', 'bag', 'Tienda', 'Datos que ven tus clientes', [
       ['shop_name', 'Nombre de la tienda', 'text'],
+      ['catalog_mode', 'Catálogo que ven los clientes', 'select', 'Vitrina = solo los productos ganadores al mejor precio (+ los que marques ⭐ en Productos). Completo = todo lo que tengan los proveedores.', [['winners', '🏆 Vitrina de ganadores (recomendado)'], ['all', '📚 Catálogo completo']]],
       ['support_contact', 'Contacto de soporte', 'text', 'Ej: @tu_usuario'],
       ['channel_url', 'Canal de Telegram (opcional)', 'text', 'Ej: https://t.me/tu_canal — aparece como botón 📢 Canal en el menú.'],
       ['welcome_text', 'Encabezado del menú principal (español)', 'area', 'Usa {name} para el nombre del cliente y {shop} para el nombre de la tienda.'],
@@ -586,8 +598,8 @@ export function adminRouter(bot) {
   ];
   const FIELDS = SECTIONS.flatMap((x) => x[4]);
   r.get('/settings', async (req, res) => {
-    const field = ([k, label, type, help]) => `<div class="field"><label for="${k}">${label}</label>
-      ${type === 'area' ? `<textarea id="${k}" name="${k}">${esc(s(k))}</textarea>` : `<input id="${k}" name="${k}" value="${esc(s(k))}" ${type === 'number' ? 'inputmode="decimal" class="num"' : ''} style="width:100%">`}
+    const field = ([k, label, type, help, opts]) => `<div class="field"><label for="${k}">${label}</label>
+      ${type === 'select' ? `<select id="${k}" name="${k}" style="width:100%">${opts.map(([v, l]) => `<option value="${esc(v)}" ${s(k) === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>` : type === 'area' ? `<textarea id="${k}" name="${k}">${esc(s(k))}</textarea>` : `<input id="${k}" name="${k}" value="${esc(s(k))}" ${type === 'number' ? 'inputmode="decimal" class="num"' : ''} style="width:100%">`}
       ${help ? `<div class="help">${esc(help)}</div>` : ''}</div>`;
     const body = `<form method="post" action="/admin/settings"><div class="grid g2">
       ${SECTIONS.map(([id, ic, title, sub, fields]) => `<div class="card" id="${id}"><h3>${icon(ic)} ${title}</h3><p class="sub">${sub}</p>${fields.map(field).join('')}</div>`).join('')}
@@ -618,6 +630,7 @@ export function adminRouter(bot) {
     for (const [k, , type] of FIELDS) {
       if (req.body[k] === undefined) continue;
       let v = String(req.body[k]);
+      if (type === 'select' && !FIELDS.find((f) => f[0] === k)[4].some(([ov]) => ov === v)) return back(res, '/admin/settings', `Valor inválido en "${k}"`);
       if (type === 'number') {
         v = v.replace(',', '.');
         if (Number.isNaN(Number(v))) return back(res, '/admin/settings', `Valor inválido en "${k}"`);

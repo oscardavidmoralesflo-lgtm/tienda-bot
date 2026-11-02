@@ -66,6 +66,7 @@
 ## 4. Funciones del bot
 - Primera vez: elegir idioma (🇪🇸/🇺🇸); todo se traduce después (`/idioma`, `/language`).
 - Menú inline: Tienda, Juegos y Gift Cards, Más vendidos, Buscar, Recargar, Mi perfil, Pedidos, Invita y gana, Soporte, Idioma, Canal.
+- **Vitrina de ganadores** (`src/winners.js`, ajuste `catalog_mode`, por defecto `winners`): la tienda solo muestra 28 productos ganadores (IA, streaming, diseño, Office, educación, VPN) más los marcados ⭐ en el panel. Cada ranura lista ofertas **equivalentes** revisadas en las descripciones (misma duración, entrega y garantía); el bot muestra la más barata con stock y la cambia sola en cada refresco. Selección del 2026-11-01 basada en los "top/trending" de Bunny, reposiciones de KOKORO y promociones de SubExpress, Jero, Hsoulz y S-AI. "Más vendidos" usa ventas reales y, mientras no haya, `TOP_ORDER`. Panel → Productos → filtro 🏆 Vitrina muestra qué oferta ve hoy el cliente. `catalog_mode=all` vuelve al catálogo completo. Juegos no cambian. Ojo: la oferta Jio de Gemini Pro 18M terminó el 29-oct; si esos links fallan, quitar `gemini_pro_18`.
 - Precios en **pesos redondos** (terminan en 400/900); internamente el saldo se guarda en USD.
 - Juegos (KOKORO): verificación del ID del jugador antes de cobrar, flujo Supercell con código.
 - Fidelización: **Ñapa** (cashback 1/2/3 % por nivel), **recordatorio de renovación** 3 días antes de vencer, referidos 5 %, **bono por recarga** (+3 % desde $100.000, +5 % desde $200.000).
