@@ -13,7 +13,6 @@ export const WINNERS = [
   // ---- Inteligencia artificial ----
   { key: 'gpt_fw', name: 'ChatGPT Plus 1 Mes · Garantía completa', ids: ['91191e45-9207-4245-a7b5-4213fff78fd8'] },
   { key: 'gpt_eco', name: 'ChatGPT Plus 1 Mes · Económico (Sin garantía)', ids: ['bunny:84', '2b9cc107-77cf-4565-99df-932da1044cc2'] },
-  { key: 'gemini_pro_18', name: 'Gemini AI Pro 18 Meses · En tu Gmail', ids: ['bunny:57'] },
   { key: 'gemini_plus_12', name: 'Gemini Plus 12 Meses · En tu Gmail', ids: ['bunny:93'] },
   { key: 'muse_1b', name: 'Muse AI · 1000 millones de tokens', ids: ['bunny:31', '630d58eb-7cd1-4707-a411-734a3e4ee08a'] },
   // ---- Diseño y edición ----
@@ -47,7 +46,7 @@ export const WINNERS = [
 ];
 
 // Orden de "Más vendidos" mientras no haya ventas propias (las ventas reales van primero)
-export const TOP_ORDER = ['gpt_eco', 'gemini_pro_18', 'capcut_1m', 'canva_3y', 'spotify_3m', 'disney_espn', 'youtube_1m', 'prime_6m', 'muse_1b', 'max_std'];
+export const TOP_ORDER = ['gpt_eco', 'gemini_plus_12', 'capcut_1m', 'canva_3y', 'spotify_3m', 'disney_espn', 'youtube_1m', 'prime_6m', 'muse_1b', 'max_std'];
 
 const slotOf = new Map();
 WINNERS.forEach((w) => w.ids.forEach((id) => slotOf.set(id, w)));
