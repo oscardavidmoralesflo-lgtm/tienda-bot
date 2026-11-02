@@ -435,6 +435,9 @@ await test('vitrina de ganadores: una oferta por producto, la más barata con st
   assert.ok(!out.some((p) => p.slot === 'disney_espn')); // sin oferta = no aparece
   const ids = WINNERS.flatMap((w) => w.ids);
   assert.equal(new Set(ids).size, ids.length); // sin repetir productos entre ranuras
+  // cada ranura cae en su categoría real (no en "Correos" ni "Otros")
+  const { categoryOf } = await import('../src/categories.js');
+  for (const w of WINNERS) assert.ok(!['mail', 'other', 'social'].includes(categoryOf(w.name).key), w.name);
   assert.ok(winnersMode());
   await saveSettings({ catalog_mode: 'all' });
   assert.ok(!winnersMode());

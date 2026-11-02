@@ -13,7 +13,7 @@ export const WINNERS = [
   // ---- Inteligencia artificial ----
   { key: 'gpt_fw', name: 'ChatGPT Plus 1 Mes · Garantía completa', ids: ['91191e45-9207-4245-a7b5-4213fff78fd8'] },
   { key: 'gpt_eco', name: 'ChatGPT Plus 1 Mes · Económico (Sin garantía)', ids: ['bunny:84', '2b9cc107-77cf-4565-99df-932da1044cc2'] },
-  { key: 'gemini_plus_12', name: 'Gemini Plus 12 Meses · En tu Gmail', ids: ['bunny:93'] },
+  { key: 'gemini_plus_12', name: 'Gemini Plus 12 Meses · En tu cuenta Google', ids: ['bunny:93'] },
   { key: 'muse_1b', name: 'Muse AI · 1000 millones de tokens', ids: ['bunny:31', '630d58eb-7cd1-4707-a411-734a3e4ee08a'] },
   // ---- Diseño y edición ----
   { key: 'capcut_1m', name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3'] },

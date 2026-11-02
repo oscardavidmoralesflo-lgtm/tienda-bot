@@ -308,7 +308,7 @@ const NAME_EN = [
   [/\bMeses\b/g, 'Months'], [/\bMes\b/g, 'Month'], [/\bAño\b/g, 'Year'], [/\bAños\b/g, 'Years'],
   [/\(Sin garantía\)/g, '(No warranty)'], [/\bCuentas\b/g, 'Accounts'], [/\bCréditos\b/g, 'Credits'],
   [/Billón de Tokens/g, 'Billion Tokens'], [/Garantía completa/g, 'Full warranty'], [/Económico/g, 'Budget'],
-  [/En tu Gmail/g, 'On your Gmail'], [/En tu cuenta/g, 'On your account'], [/Cuenta privada/g, 'Private account'],
+  [/En tu cuenta Google/g, 'On your Google account'], [/En tu cuenta/g, 'On your account'], [/Cuenta privada/g, 'Private account'],
   [/Cuenta lista/g, 'Ready account'], [/Cuenta Team/g, 'Team account'], [/Licencia/g, 'License'],
   [/Plan Estándar/g, 'Standard Plan'], [/ con ESPN/g, ' with ESPN'], [/1000 millones de tokens/g, '1 billion tokens'], [/\(Código\)/g, '(Code)'], [/\(Invitación\)/g, '(Invite)'],
 ];
