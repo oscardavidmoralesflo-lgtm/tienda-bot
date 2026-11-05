@@ -19,12 +19,14 @@ export const WINNERS = [
   { key: 'gpt_eco', cop: 26900, name: 'ChatGPT Plus 1 Mes · Económico (Sin garantía)', ids: ['bunny:84', '2b9cc107-77cf-4565-99df-932da1044cc2'] },
   // Jero: link de 3 meses en tu cuenta Google, pide tarjeta para verificar, sin garantía (igual que el de KOKORO)
   { key: 'gemini_pro_3m', cop: 7900, name: 'Gemini AI Pro 3 Meses · En tu cuenta Google', ids: ['df31e1db-17be-4d27-9e44-4949578ec406'],
-    match: [{ src: 'jero', re: /^gemini ai pro\W+3 months?$/i }] },
+    // La API de Jero (nombres en turco: "Aylık" = meses) aún no lo publica; solo está en su bot
+    match: [{ src: 'jero', re: /^gemini ai pro\W+3 (months?|ayl[ıi]k)$/i }] },
   { key: 'gemini_plus_12', cop: 9900, name: 'Gemini Plus 12 Meses · En tu cuenta Google', ids: ['bunny:93'] },
   { key: 'muse_1b', cop: 4900, name: 'Muse AI · 1000 millones de tokens', ids: ['bunny:31', '630d58eb-7cd1-4707-a411-734a3e4ee08a'] },
   // ---- Diseño y edición ----
-  { key: 'capcut_1m', cop: 12900, name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3'],
-    match: [{ src: 'subexpress', re: /^capcut pro 30 days\s*\|\s*fw/i }, { src: 'jero', re: /^capcut pro 1 month$/i }] },
+  // jero:14 = "CapCut Pro 1 Aylık" en su API (cuenta personal, garantía 25 días)
+  { key: 'capcut_1m', cop: 12900, name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3', 'jero:14'],
+    match: [{ src: 'subexpress', re: /^capcut pro 30 days\s*\|\s*fw/i }, { src: 'jero', re: /^capcut pro 1 (month|ayl[ıi]k)$/i }] },
   { key: 'canva_3y', cop: 9900, name: 'Canva Pro 3 Años · Cuenta lista', ids: ['canva_team_invite_pro'] },
   { key: 'canva_own', cop: 14900, name: 'Canva Pro 3 Años · En tu correo', ids: ['canva_team_invite_own_email_pro'] },
   { key: 'adobe_express_12', cop: 7900, name: 'Adobe Express Premium 12 Meses', ids: ['adobe_express_12m'] },
@@ -44,7 +46,7 @@ export const WINNERS = [
   { key: 'linkedin_3m', cop: 14900, name: 'LinkedIn Premium Career 3 Meses', ids: ['linkedin_career_3m'] },
   // ---- Office y productividad ----
   { key: 'm365_12', cop: 19900, name: 'Microsoft 365 Personal 12 Meses', ids: ['Microsoft_365_personal'] },
-  { key: 'office365_12', cop: 9900, name: 'Office 365 Pro Plus 12 Meses · Cuenta privada', ids: [],
+  { key: 'office365_12', cop: 9900, name: 'Office 365 Pro Plus 12 Meses · Cuenta privada', ids: ['jero:83'],
     match: [{ src: 'jero', re: /^office 365 pro plus$/i }] },
   { key: 'office_2021', cop: 14900, name: 'Office 2021 Pro Plus · Licencia', ids: ['2a45036b-b2c5-4a8a-a5fc-9141e43c1046'] },
   { key: 'windows_pro', cop: 14900, name: 'Windows 10/11 Pro · Licencia', ids: ['be5b54d4-4f2b-49bc-ac40-2a40b299bbf9'] },

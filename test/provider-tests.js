@@ -21,6 +21,8 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
         {id:7,title:'Gemini Invite (Pro 18 Months Family)',price:3,stock:30,tiers:[]},
         {id:900001,title:'Elementor Pro',price:2,stock:99,tiers:[]},
         {id:8,title:'Gemini AI Pro 3 Months',price:0.9,stock:1247,tiers:[]},
+        {id:14,title:'CapCut Pro 1 Aylık',price:1.75,stock:37,tiers:[]},
+        {id:11,title:'Envato 1 Aylık',price:2,stock:83,tiers:[]},
       ]}});
       if(q.get('action')==='balance')return json({success:true,data:{balance:50}});
       if(q.get('action')==='order'&&req.method==='POST'){state.jeroCalls++;return json({success:true,order_id:'J'+state.jeroCalls,items:['office@mail.com|Clave123'],total:0.15*body.quantity,balance:49.85});}
@@ -168,7 +170,7 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
       assert.equal(all.find(x=>x.sourceId==='7').supported,false); // invitación a un Gmail: otro flujo
       assert.equal(all.find(x=>x.sourceId==='900001').supported,false);
       const pub=await providers.extraProducts('jero',{fresh:true});
-      assert.deepEqual(pub.map(x=>x.sourceId).sort(),['5','8']); // aprobados en la vitrina, sin marcarlos
+      assert.deepEqual(pub.map(x=>x.sourceId).sort(),['14','5','8']); // aprobados en la vitrina (nombres en turco incluidos); Envato no
       const { curate } = await import('../src/winners.js');
       const shown=curate(pub,{priceOf:x=>x.price,isFeatured:()=>false});
       assert.ok(shown.some(x=>x.slot==='office365_12'&&x.id==='jero:5'));
