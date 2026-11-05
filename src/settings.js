@@ -5,6 +5,7 @@ export const DEFAULTS = {
   shop_name: 'Nova Plus',
   // 'winners' = solo la vitrina de productos ganadores (src/winners.js) + los destacados ⭐; 'all' = todo el catálogo
   catalog_mode: 'winners',
+  winner_prices: '', // precios objetivo de la vitrina guardados desde el panel (JSON); vacío = los de src/winners.js
   currency: 'USDT',
   markup_products: '20',   // % general (solo si no hay tramos)
   markup_games: '15',

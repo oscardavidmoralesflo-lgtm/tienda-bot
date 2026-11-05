@@ -12,7 +12,7 @@ import { esc, tgHtml, ref, deref } from '../util.js';
 import { DISPLAY_ORDER, CAT_BY_KEY, categoryOf, iconOf, catLabel } from '../categories.js';
 import { t, errorText, localName } from '../i18n.js';
 import { show, pager, cut, cancelKb, navRow, stockIcon, LINE } from './ui.js';
-import { curate, winnersMode, winnerSlot, WINNERS, TOP_ORDER } from '../winners.js';
+import { curate, winnersMode, winnerSlot, asSlotProduct, TOP_ORDER } from '../winners.js';
 
 const PER_PAGE = 8;
 const cur = () => copMode() ? 'COP' : s('currency');
@@ -92,8 +92,7 @@ async function findProduct(key, fresh = false) {
   const p = await catalog.findProduct(id, fresh);
   if (!p || isHidden(p.id)) return null;
   // En modo vitrina el producto se muestra y se registra con el nombre claro de su ranura
-  const slot = winnersMode() ? winnerSlot(p.id) : null;
-  if (slot) return { ...p, name: slot.name, slot: slot.key };
+  if (winnersMode() && winnerSlot(p.id)) return asSlotProduct(p);
   return p.displayName ? { ...p, name: p.displayName } : p;
 }
 

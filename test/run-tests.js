@@ -444,6 +444,30 @@ await test('vitrina de ganadores: una oferta por producto, la más barata con st
   await saveSettings({ catalog_mode: 'winners' });
 });
 
+await test('vitrina: precio objetivo en pesos exacto, protegido si sube el costo y editable desde el panel', async () => {
+  const { asSlotProduct, targetCop } = await import('../src/winners.js');
+  await saveSettings({ cop_rate: '4000', price_display: 'cop', catalog_mode: 'winners', winner_prices: '' });
+  const base = { id: 'canva_team_invite_own_email_pro', name: 'x', price: 1, stock: 10 };
+  const sp = asSlotProduct(base);
+  assert.equal(sp.targetCop, 14900);
+  assert.equal(Math.round(pricing.productUnitPrice(sp) * 4000), 14900); // se cobra exactamente el precio objetivo
+  // el proveedor sube el costo a 10 USD (40.000 COP): el precio sube solo para no perder
+  const dear = asSlotProduct({ ...base, price: 10 });
+  const sale = pricing.productUnitPrice(dear);
+  assert.ok(sale * 4000 > 40000 && pricing.protectsProfit(10, sale));
+  // precio guardado en el panel
+  await saveSettings({ winner_prices: JSON.stringify({ canva_own: 19900 }) });
+  assert.equal(targetCop('canva_own'), 19900);
+  assert.equal(Math.round(pricing.productUnitPrice(asSlotProduct(base)) * 4000), 19900);
+  // 0 = margen automático
+  await saveSettings({ winner_prices: JSON.stringify({ canva_own: 0 }) });
+  assert.equal(asSlotProduct(base).targetCop, 0);
+  // fuera del modo vitrina no se toca
+  await saveSettings({ catalog_mode: 'all', winner_prices: '' });
+  assert.equal(asSlotProduct(base).targetCop, undefined);
+  await saveSettings({ catalog_mode: 'winners', cop_rate: '0' });
+});
+
 await (await import('./provider-tests.js')).runProviderTests({test,users,orders,pricing,saveSettings,one});
 console.log(`\n${pass} pruebas OK`);
 mock.close();

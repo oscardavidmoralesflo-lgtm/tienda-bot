@@ -114,6 +114,11 @@ export function productUnitPrice(product, qty = 1) {
     const ratio = Number(product.price) > 0 ? cost / Number(product.price) : 1;
     return protectedPrice(cost, round2(Number(o.fixed_price) * ratio), 'products', qty);
   }
+  // Vitrina: precio objetivo en pesos (redondo). Si ya no deja la ganancia mínima, se usa el protegido.
+  if (Number(product.targetCop) > 0 && copRate() > 0) {
+    const ratio = Number(product.price) > 0 ? cost / Number(product.price) : 1;
+    return protectedPrice(cost, round4(((Number(product.targetCop) - 0.5) / copRate()) * ratio), 'products', qty);
+  }
   const markup = o?.markup != null ? Number(o.markup) : tierPct(cost, 'products');
   // la ganancia mínima es por pedido: en compras por volumen se reparte entre las unidades
   return protectedPrice(cost, applyMarkup(cost, markup, num('min_profit_products') / Math.max(1, qty)), 'products', qty);

@@ -19,7 +19,7 @@ import { estimatedProfit } from '../pricing.js';
 import { providerNames, clearProviderCache } from '../providers.js';
 import { providersRouter } from './providers.js';
 import { page, loginPage, icon, avatar, salesChart, donut } from './layout.js';
-import { curate, winnersMode, winnerSlot, WINNERS } from '../winners.js';
+import { curate, winnersMode, winnerSlot, asSlotProduct, targetCop, WINNERS } from '../winners.js';
 import { isHidden } from '../pricing.js';
 
 const COOKIE = 'adm';
@@ -417,7 +417,7 @@ export function adminRouter(bot) {
       const o = getOverride(p.id) || {};
       const fid = `f_${crypto.createHash('md5').update(p.id).digest('hex').slice(0, 10)}`;
       const c = categoryOf(p.name);
-      const price = productUnitPrice(p);
+      const price = productUnitPrice(asSlotProduct(p));
       const profit = estimatedProfit(p.price,price);
       const slot = winnerSlot(p.id);
       const vitTag = slot ? `<div style="font-size:12px" class="${shownIds.has(p.id) ? 'ok' : 'muted'}">🏆 Vitrina: ${esc(slot.name)} · ${shownIds.has(p.id) ? 'se muestra (mejor precio con stock)' : 'en espera (otra opción es más barata o no hay stock)'}</div>` : (o.featured ? `<div style="font-size:12px" class="ok">⭐ Destacado: se muestra en la vitrina</div>` : '');
@@ -432,7 +432,30 @@ export function adminRouter(bot) {
         <td><label class="switch" title="Ocultar del bot"><input form="${fid}" type="checkbox" name="hidden" ${o.hidden ? 'checked' : ''}></label></td>
         <td><form id="${fid}" method="post" action="/admin/overrides" style="margin:0"><input type="hidden" name="item_id" value="${esc(p.id)}"><input type="hidden" name="kind" value="product"><input type="hidden" name="name" value="${esc(p.name)}"><input type="hidden" name="back" value="${esc(backUrl)}"><button class="sm">Guardar</button></form></td></tr>`;
     }).join('');
+    // Editor de precios de la vitrina (solo con el filtro 🏆 Vitrina)
+    let vitCard = '';
+    if (vit) {
+      const shown = new Map(curate(products.filter((p) => p.winner && !isHidden(p.id)), { priceOf: (p) => productUnitPrice(p), isFeatured: () => false }).map((p) => [p.slot, p]));
+      const rate = copRate();
+      const vrows = WINNERS.map((w) => {
+        const p = shown.get(w.key);
+        const sale = p ? productUnitPrice(p) : 0;
+        const tgt = targetCop(w.key);
+        const raised = p && tgt && rate && Math.round(sale * rate) > tgt + 50;
+        return `<tr><td class="wrap"><b>${esc(w.name)}</b><div class="muted" style="font-size:12px">${p ? `${esc(providerNames[p.source] || p.source)} · stock ${p.stock >= 999 ? '∞' : p.stock}${p.offers > 1 ? ` · ${p.offers} opciones` : ''}` : '<span class="bad">Sin stock: no se muestra</span>'}</div></td>
+          <td class="r num muted">${p ? `${money(p.price)}${rate ? `<div style="font-size:12px">${cop(p.price)}</div>` : ''}` : '—'}</td>
+          <td><input form="vitprices" name="p_${w.key}" class="in-sm num" style="width:96px" value="${tgt || ''}" placeholder="auto" inputmode="numeric" title="Precio en pesos (vacío = margen automático)"></td>
+          <td class="r num">${p ? `<b>${fmt(sale)}</b>${raised ? '<div class="warn" style="font-size:12px">subido por costo</div>' : ''}` : '—'}</td>
+          <td class="r num ${p ? 'ok' : ''}">${p ? `+${money(estimatedProfit(p.price, sale))}${rate ? `<div style="font-size:12px">${cop(estimatedProfit(p.price, sale))}</div>` : ''}` : '—'}</td></tr>`;
+      }).join('');
+      vitCard = `<div class="card" style="margin-bottom:16px"><h3>${icon('trend')} Precios de la vitrina</h3>
+        <p class="sub">Precio en pesos que ve el cliente. Si el proveedor sube el costo y ya no deja tu ganancia mínima, el bot sube el precio solo. Vacío = margen automático.</p>
+        <form id="vitprices" method="post" action="/admin/winner-prices" style="margin:0"></form>
+        <div class="tablewrap"><table><thead><tr><th>Producto</th><th class="r">Costo hoy (USD)</th><th>Tu precio (COP)</th><th class="r">Precio final</th><th class="r">Ganancia</th></tr></thead><tbody>${vrows}</tbody></table></div>
+        <div style="margin-top:12px"><button form="vitprices">Guardar precios</button></div></div>`;
+    }
     const body = `
+      ${vitCard}
       ${err ? `<div class="card" style="margin-bottom:16px"><b class="bad">Error al leer el catálogo:</b> ${esc(err)}</div>` : ''}
       ${catalog.bunnyStatus().error ? `<div class="card" style="margin-bottom:16px"><b class="warn">Bunny no respondió:</b> ${esc(catalog.bunnyStatus().error)}</div>` : ''}
       <div class="card" style="margin-bottom:16px"><div class="chips" style="margin-bottom:12px">${chips}</div><div class="split" style="flex-wrap:wrap"><div class="chips">${srcChips}</div>
@@ -500,6 +523,19 @@ export function adminRouter(bot) {
       <div class="tablewrap"><table id="gtable"><thead><tr><th>Paquete</th><th>Región</th><th>Stock</th><th class="r">Costo</th><th class="r">Tu precio</th><th>Margen</th><th>Precio fijo</th><th>Ocultar</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     await render(req, res, `${game.emoji_base || '🎮'} ${game.name}`, body, { path: '/admin/games', subtitle: `<a href="/admin/games?kind=${game.kind || 'topup'}">← Volver a juegos</a>` });
   });
+  r.post('/winner-prices', async (req, res) => {
+    const prices = {};
+    for (const w of WINNERS) {
+      const raw = String(req.body[`p_${w.key}`] ?? '').replace(/[.\s$]/g, '').replace(',', '.');
+      if (raw === '') { prices[w.key] = 0; continue; }
+      const v = Math.round(Number(raw));
+      if (!Number.isFinite(v) || v < 0 || v > 5_000_000) return back(res, '/admin/products?vit=1', `Precio inválido en "${w.name}"`);
+      prices[w.key] = v;
+    }
+    await saveSettings({ winner_prices: JSON.stringify(prices) });
+    back(res, '/admin/products?vit=1', 'Precios de la vitrina guardados');
+  });
+
   r.post('/overrides', async (req, res) => {
     const { item_id, kind, name, markup, fixed_price, hidden, featured } = req.body;
     if (!item_id) return back(res, '/admin', 'Falta el producto');
