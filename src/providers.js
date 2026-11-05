@@ -68,7 +68,7 @@ export function normalizeProviderProduct(id, p) {
     delivery=p.delivery?.type || 'standard';
     supported=(!p.quantity_unit || p.quantity_unit === 'item') && (!p.fulfillment_kind || p.fulfillment_kind === 'codes');
   } else if (id === 'jero') {
-    sourceId=p.id; price=Number(p.price); stock=stockOf(p.stock);
+    sourceId=p.id ?? p.product_id; price=Number(p.price ?? p.price_usd); stock=stockOf(p.stock ?? p.available_stock ?? p.qty, p.available ?? p.in_stock);
     // Productos con datos extra (WordPress, UI8, invitaciones a un Gmail) usan otro flujo: no se publican.
     if (Number(p.id) >= 900000 || /invite|elementor|rank math|ui8/i.test(String(p.title || p.name || ''))) supported=false;
   } else if (id === 'subexpress') {
@@ -80,7 +80,7 @@ export function normalizeProviderProduct(id, p) {
     // Los servicios que piden credenciales de clientes y los boosts necesitan otro flujo.
   }
   supported &&= fields.length <= 1 && sourceId != null && Number.isFinite(price) && price > 0 && delivery === 'instant';
-  if(id!=='pai'&&!Number.isSafeInteger(Number(sourceId)))supported=false;
+  if(!['pai','jero','subexpress'].includes(id)&&!Number.isSafeInteger(Number(sourceId)))supported=false;
   // P-AI no declara modo de entrega en el listado de códigos; se exige stock y cotización al pagar.
   const name=safeText(p.name ?? p.title);
   if (!name || !Number.isFinite(Number(min)) || !Number.isFinite(Number(max))) supported=false;
@@ -92,11 +92,27 @@ export function normalizeProviderProduct(id, p) {
     supported,delivery_mode:delivery,checked_at:new Date().toISOString(),
   };
 }
+// Busca la lista de productos aunque venga envuelta (data.products, result.items…) o como mapa {id: producto}
+const looksLikeProduct = x => x && typeof x === 'object' && !Array.isArray(x) && (x.price != null || x.unit_price != null || x.price_usd != null);
+export function findRows(d, depth = 0) {
+  if (Array.isArray(d)) return d;
+  if (!d || typeof d !== 'object' || depth > 3) return null;
+  for (const k of ['products','data','items','result','results','catalog','services']) {
+    const r = findRows(d[k], depth + 1);
+    if (r) return r;
+  }
+  const vals = Object.values(d).filter(v => v && typeof v === 'object');
+  if (vals.length && vals.every(looksLikeProduct)) return Object.entries(d).map(([k, v]) => ({ id: k, ...v }));
+  return null;
+}
+// Para diagnosticar formatos nuevos sin mostrar datos: solo los nombres de los campos
+const shapeOf = d => Array.isArray(d) ? 'lista' : d && typeof d === 'object' ? Object.keys(d).filter(k => k !== '_http').slice(0, 8).map(k => `${k}:${Array.isArray(d[k]) ? 'lista' : typeof d[k]}`).join(', ') : typeof d;
+
 async function load(id) {
   try {
     const d=await providerRequest(id,'GET',id==='jero'?'?action=products':'/products');
-    const rows=Array.isArray(d) ? d : d.products || d.data || [];
-    if (!Array.isArray(rows)) throw new Error('Formato de catálogo no reconocido');
+    const rows=findRows(d) || (d && typeof d === 'object' && !Object.keys(d).some(k => k !== '_http' && k !== 'success' && k !== 'ok') ? [] : null);
+    if (!Array.isArray(rows)) throw new Error(`Formato de catálogo no reconocido (${shapeOf(d)})`);
     const products=rows.map(p=>normalizeProviderProduct(id,p));
     health.set(id,{lastSuccess:new Date().toISOString(),error:null,count:products.length});
     return products;
@@ -111,7 +127,8 @@ export async function extraProducts(id, {fresh=false,all=false}={}) {
 export async function extraBalance(id) {
   if(id==='subexpress')return {balance:null,canPurchase:true}; // sin consulta de saldo documentada: un 402 no cobra
   const d=await providerRequest(id,'GET',id==='safwan'?'/balance':id==='jero'?'?action=balance':'/me');
-  const value=id==='resellwithme' ? Number(d.wallets?.USD?.balance_micros)/1e6 : Number(d.balance);
+  const raw=d.balance ?? d.data?.balance ?? d.wallet?.balance ?? d.result?.balance ?? (typeof d.data === 'number' ? d.data : undefined);
+  const value=id==='resellwithme' ? Number(d.wallets?.USD?.balance_micros)/1e6 : Number(typeof raw === 'object' && raw ? raw.usd ?? raw.USD ?? raw.amount : raw);
   return {balance:Number.isFinite(value)?value:null,canPurchase:d.can_purchase!==false};
 }
 export async function quoteExtra(id,product,quantity,activationData) {
@@ -142,8 +159,8 @@ export async function quoteExtra(id,product,quantity,activationData) {
 }
 export async function purchaseExtra(id,o,product,quote,activationData) {
   if(id==='safwan')return providerRequest(id,'POST','/order',{product_id:Number(product.sourceId),quantity:o.quantity,request_id:o.external_order_id});
-  if(id==='jero')return providerRequest(id,'POST','?action=order',{product_id:Number(product.sourceId),quantity:o.quantity,external_order_id:o.external_order_id});
-  if(id==='subexpress')return providerRequest(id,'POST','/order',{product_id:Number(product.sourceId),quantity:o.quantity});
+  if(id==='jero')return providerRequest(id,'POST','?action=order',{product_id:/^\d+$/.test(product.sourceId)?Number(product.sourceId):product.sourceId,quantity:o.quantity,external_order_id:o.external_order_id});
+  if(id==='subexpress')return providerRequest(id,'POST','/order',{product_id:/^\d+$/.test(product.sourceId)?Number(product.sourceId):product.sourceId,quantity:o.quantity});
   if(id==='hmk')return providerRequest(id,'POST','/orders',{product_id:Number(product.sourceId),quantity:o.quantity,idempotency_key:o.external_order_id,...(activationData?{customer_input:activationData}:{})});
   if(id==='resellwithme')return providerRequest(id,'POST','/orders',{product_id:Number(product.sourceId),qty:o.quantity,quote_id:quote.quoteId,...(activationData?{fields:{[product.input_fields[0].key]:activationData}}:{})},{'Idempotency-Key':o.external_order_id});
   return providerRequest(id,'POST','/order',{service_id:product.sourceId,quantity:o.quantity,external_order_id:o.external_order_id});

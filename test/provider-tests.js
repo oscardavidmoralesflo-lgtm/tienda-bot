@@ -16,13 +16,13 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
     const q=new URL(req.url,'http://x').searchParams;
     if(path==='/jero') {
       if(req.headers.authorization!=='Bearer secret-test-jero-0123456789')return json({success:false,error:{code:'unauthorized',message:'bad key'}},401);
-      if(q.get('action')==='products')return json({success:true,products:[
+      if(q.get('action')==='products')return json({success:true,data:{products:[
         {id:5,title:'Office 365 Pro Plus',price:0.15,stock:700,tiers:[]},
         {id:7,title:'Gemini Invite (Pro 18 Months Family)',price:3,stock:30,tiers:[]},
         {id:900001,title:'Elementor Pro',price:2,stock:99,tiers:[]},
         {id:8,title:'Gemini AI Pro 3 Months',price:0.9,stock:1247,tiers:[]},
-      ]});
-      if(q.get('action')==='balance')return json({success:true,balance:50});
+      ]}});
+      if(q.get('action')==='balance')return json({success:true,data:{balance:50}});
       if(q.get('action')==='order'&&req.method==='POST'){state.jeroCalls++;return json({success:true,order_id:'J'+state.jeroCalls,items:['office@mail.com|Clave123'],total:0.15*body.quantity,balance:49.85});}
       if(q.get('action')==='order')return json({success:true,order_id:'J1',status:'completed',items:['office@mail.com|Clave123'],total:0.15});
     }
@@ -178,6 +178,7 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
       assert.equal(r.order.status,'delivered');assert.equal(r.order.kind,'jero');assert.match(r.order.delivery,/office@mail.com/);
       const call=state.calls.find(x=>x.method==='POST'&&x.url.startsWith('/jero?action=order'));
       assert.equal(call.body.external_order_id,r.order.external_order_id);
+      assert.strictEqual(call.body.product_id,5);
     });
     await test('SubExpress: compra directa; 409 reembolsa; un corte no se reintenta',async()=>{
       await settings.saveProviderSettings('subexpress',{key:'secret-test-subexpress-0123456789',enabled:true,selected:[]});
