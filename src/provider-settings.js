@@ -8,6 +8,10 @@ export const PROVIDER_SPECS = {
   hmk: { name: 'HMK', base: 'https://api.hmk.digital/api/v1', env: 'HMK_API_KEY', docs: 'https://www.hmkstore.com/en/developers' },
   resellwithme: { name: 'ResellWithMe', base: 'https://resellwithme.com/api/v1', env: 'RESELLWITHME_API_KEY', docs: 'https://resellwithme.com/api/v1/doc?lang=en' },
   pai: { name: 'P-AI', base: 'https://p-ai.world/api/v1', env: 'PAI_API_KEY', docs: 'https://p-ai.world/developers' },
+  // Jero Accounts: @JeroAccountsBot → API → Generate API key (docs en el mismo menú). Pedidos con external_order_id (sin cobro doble).
+  jero: { name: 'Jero Accounts', base: 'https://api.jeroaccounts.com/api/reseller', env: 'JERO_API_KEY', docs: 'https://t.me/JeroAccountsBot' },
+  // SubExpress: @Subexpressshope_bot → Partner API → Create Key. Sin ID de pedido propio: nunca se reintenta una compra.
+  subexpress: { name: 'SubExpress', base: 'https://api.subexpress.space/v1', env: 'SUBEXPRESS_API_KEY', docs: 'https://t.me/Subexpressshope_bot' },
 };
 const saved = new Map();
 function encryptionKey() {

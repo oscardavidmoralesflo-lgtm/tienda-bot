@@ -406,10 +406,10 @@ export function adminRouter(bot) {
     // Vitrina: qué oferta de cada ranura ve hoy el cliente
     const shownIds = new Set(curate(products.filter((p) => p.winner && !isHidden(p.id)), { priceOf: (p) => productUnitPrice(p), isFeatured: (id) => !!getOverride(id)?.featured }).map((p) => p.id));
     const vit = req.query.vit === '1';
-    if (vit) list = list.filter((p) => winnerSlot(p.id) || getOverride(p.id)?.featured);
+    if (vit) list = list.filter((p) => winnerSlot(p) || getOverride(p.id)?.featured);
     list.sort((a, b) => (a.group || a.name).localeCompare(b.group || b.name) || a.price - b.price);
     const link = (c, sr) => `/admin/products?${new URLSearchParams({ ...(c ? { cat: c } : {}), ...(sr ? { src: sr } : {}) })}`;
-    const vitCount = products.filter((p) => winnerSlot(p.id) || getOverride(p.id)?.featured).length;
+    const vitCount = products.filter((p) => winnerSlot(p) || getOverride(p.id)?.featured).length;
     const chips = `<a class="chipf ${req.query.vit === '1' ? 'on' : ''}" href="/admin/products?vit=1">🏆 Vitrina (${vitCount})</a><a class="chipf ${!cat && req.query.vit !== '1' ? 'on' : ''}" href="${link('', src)}">Todas (${products.length})</a>${DISPLAY_ORDER.filter((c) => counts[c.key]).map((c) => `<a class="chipf ${cat === c.key ? 'on' : ''}" href="${link(c.key, src)}">${c.icon} ${c.label} (${counts[c.key]})</a>`).join('')}`;
     const srcChips = `<a class="chipf ${!src ? 'on' : ''}" href="${link(cat, '')}">Todos</a>${Object.entries(providerNames).map(([id,name])=>`<a class="chipf ${src===id?'on':''}" href="${link(cat,id)}">${esc(name)}</a>`).join('')}`;
     const backUrl = link(cat, src);
@@ -419,7 +419,7 @@ export function adminRouter(bot) {
       const c = categoryOf(p.name);
       const price = productUnitPrice(asSlotProduct(p));
       const profit = estimatedProfit(p.price,price);
-      const slot = winnerSlot(p.id);
+      const slot = winnerSlot(p);
       const vitTag = slot ? `<div style="font-size:12px" class="${shownIds.has(p.id) ? 'ok' : 'muted'}">🏆 Vitrina: ${esc(slot.name)} · ${shownIds.has(p.id) ? 'se muestra (mejor precio con stock)' : 'en espera (otra opción es más barata o no hay stock)'}</div>` : (o.featured ? `<div style="font-size:12px" class="ok">⭐ Destacado: se muestra en la vitrina</div>` : '');
       return `<tr style="${p.winner && (!winnersMode() || shownIds.has(p.id)) ? '' : 'opacity:.5'}">
         <td class="wrap"><div class="prod"><span style="font-size:18px">${iconOf(p.name)}</span><div><b>${esc(p.name)}</b>${p.group ? `<div style="font-size:12px" class="${p.winner ? 'ok' : 'muted'}">${p.winner ? '✅ Visible en el bot' : '⏸ Oculto: hay uno más barato'}${p.displayName ? ` como “${esc(p.group)}”` : ''}</div>` : ''}${vitTag}<div class="row" style="gap:6px;margin-top:5px"><span class="badge b-muted">${c.icon} ${c.label}</span>${sourceBadge(p.source)}</div></div></div></td>

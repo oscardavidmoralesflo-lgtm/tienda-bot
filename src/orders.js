@@ -427,7 +427,7 @@ async function maybeRefundMissing(o) {
 
 export async function pollOpenOrders() {
   const open = await many(
-    `SELECT * FROM orders WHERE status IN ('pending','processing','action_required') AND kind NOT IN ('bunny','safwan')
+    `SELECT * FROM orders WHERE status IN ('pending','processing','action_required') AND kind NOT IN ('bunny','safwan','subexpress')
      AND created_at > now() - interval '3 days' ORDER BY id LIMIT 30`,
   );
   for (const o of open) {

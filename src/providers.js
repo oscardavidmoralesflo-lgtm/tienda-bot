@@ -1,6 +1,7 @@
 // Adaptadores basados en las referencias oficiales de cada proveedor (30-10-2026).
 import { PROVIDER_SPECS, providerConnection, publicProviderSettings } from './provider-settings.js';
 import * as cache from './cache.js';
+import { winnerSlot } from './winners.js';
 
 export const providerNames = { kokoro: 'KOKORO', bunny: 'Bunny', ...Object.fromEntries(Object.entries(PROVIDER_SPECS).map(([id,p]) => [id,p.name])) };
 export const isExtraProvider = id => Object.hasOwn(PROVIDER_SPECS, id);
@@ -27,7 +28,7 @@ export async function providerRequest(id, method, path, body, headers = {}) {
   try {
     res = await fetch(`${testBase || spec.base}${path}`, {
       method, redirect:'error', signal:AbortSignal.timeout(method === 'GET' ? 20000 : 60000),
-      headers: { ...(id === 'resellwithme' ? { Authorization:`Bearer ${key}` } : { 'X-API-Key':key }), ...(body ? { 'Content-Type':'application/json' } : {}), ...headers },
+      headers: { ...(['resellwithme','jero','subexpress'].includes(id) ? { Authorization:`Bearer ${key}` } : { 'X-API-Key':key }), ...(body ? { 'Content-Type':'application/json' } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -38,6 +39,8 @@ export async function providerRequest(id, method, path, body, headers = {}) {
   if (!res.ok || data.success === false || data.ok === false || data.status === 'error') {
     const err = typeof data.error === 'object' ? data.error : data;
     const notCharged = err.charged === false || data.wallet_status === 'not_charged' ||
+      ['unauthorized','invalid_request','product_not_found','out_of_stock','insufficient_balance','rate_limited','api_paused'].includes(err.code) ||
+      (id === 'subexpress' && [401,402,404,409,429,400].includes(res.status)) ||
       (!data.order_id && !err.order_id && [400,401,402,403,404,422].includes(res.status));
     throw new ProviderError(`${spec.name}: ${safeText(err.message || data.message || (typeof data.error === 'string' ? data.error : '') || `HTTP ${res.status}`).replaceAll(key,'[oculto]').slice(0,220)}`, {
       provider:id, status:res.status, code:err.code || data.code, notCharged, orderId:data.order_id || err.order_id,
@@ -64,6 +67,13 @@ export function normalizeProviderProduct(id, p) {
     fields=(p.required_fields || p.input_fields?.filter(f=>f.required).map(f=>f.key) || []).map(key=>({key,required:true}));
     delivery=p.delivery?.type || 'standard';
     supported=(!p.quantity_unit || p.quantity_unit === 'item') && (!p.fulfillment_kind || p.fulfillment_kind === 'codes');
+  } else if (id === 'jero') {
+    sourceId=p.id; price=Number(p.price); stock=stockOf(p.stock);
+    // Productos con datos extra (WordPress, UI8, invitaciones a un Gmail) usan otro flujo: no se publican.
+    if (Number(p.id) >= 900000 || /invite|elementor|rank math|ui8/i.test(String(p.title || p.name || ''))) supported=false;
+  } else if (id === 'subexpress') {
+    sourceId=p.id ?? p.product_id; price=Number(p.price ?? p.price_usd ?? p.unit_price);
+    stock=stockOf(p.stock ?? p.in_stock ?? p.available_stock, p.available); max=50;
   } else if (id === 'pai') {
     sourceId=p.service_id; price=Number(p.unit_price); stock=stockOf(p.stock); min=p.min_quantity||1; max=p.max_quantity||10000;
     supported=p.input_type === 'quantity' && Number(p.price_per || 1) === 1;
@@ -72,19 +82,19 @@ export function normalizeProviderProduct(id, p) {
   supported &&= fields.length <= 1 && sourceId != null && Number.isFinite(price) && price > 0 && delivery === 'instant';
   if(id!=='pai'&&!Number.isSafeInteger(Number(sourceId)))supported=false;
   // P-AI no declara modo de entrega en el listado de códigos; se exige stock y cotización al pagar.
-  const name=safeText(p.name);
+  const name=safeText(p.name ?? p.title);
   if (!name || !Number.isFinite(Number(min)) || !Number.isFinite(Number(max))) supported=false;
   return {
     id:`${id}:${sourceId}`,source:id,sourceId:String(sourceId),name,price,stock:Math.min(stock,Number(max)),
     min_order:Number(min),max_order:Number(max),requires_activation_data:fields.length===1,
     activation_data_type:fields[0]?.key === 'email' ? 'email' : 'default',input_fields:fields,
-    description_es:htmlText(desc),description_en:htmlText(desc),bulk_discounts:id==='hmk' ? (p.tiers||[]).map(t=>({min_qty:Number(t.min_quantity),unit_price:Number(t.price)})).filter(t=>t.min_qty>0&&t.unit_price>0) : [],
+    description_es:htmlText(desc),description_en:htmlText(desc),bulk_discounts:['hmk','jero'].includes(id) ? (Array.isArray(p.tiers)?p.tiers:[]).map(t=>({min_qty:Number(t.min_quantity ?? t.min_qty ?? t.qty ?? t.min),unit_price:Number(t.price ?? t.unit_price)})).filter(t=>t.min_qty>0&&t.unit_price>0) : [],
     supported,delivery_mode:delivery,checked_at:new Date().toISOString(),
   };
 }
 async function load(id) {
   try {
-    const d=await providerRequest(id,'GET','/products');
+    const d=await providerRequest(id,'GET',id==='jero'?'?action=products':'/products');
     const rows=Array.isArray(d) ? d : d.products || d.data || [];
     if (!Array.isArray(rows)) throw new Error('Formato de catálogo no reconocido');
     const products=rows.map(p=>normalizeProviderProduct(id,p));
@@ -96,10 +106,11 @@ export async function extraProducts(id, {fresh=false,all=false}={}) {
   const c=providerConnection(id);
   if (!c.key || (!all && !c.enabled)) return [];
   const rows=await (fresh ? cache.fresh(`p:${id}:products`,()=>load(id)) : cache.swr(`p:${id}:products`,()=>load(id)));
-  return all ? rows : rows.filter(p=>p.supported && c.selected.includes(p.sourceId));
+  return all ? rows : rows.filter(p=>p.supported && (c.selected.includes(p.sourceId) || !!winnerSlot(p)));
 }
 export async function extraBalance(id) {
-  const d=await providerRequest(id,'GET',id==='safwan'?'/balance':'/me');
+  if(id==='subexpress')return {balance:null,canPurchase:true}; // sin consulta de saldo documentada: un 402 no cobra
+  const d=await providerRequest(id,'GET',id==='safwan'?'/balance':id==='jero'?'?action=balance':'/me');
   const value=id==='resellwithme' ? Number(d.wallets?.USD?.balance_micros)/1e6 : Number(d.balance);
   return {balance:Number.isFinite(value)?value:null,canPurchase:d.can_purchase!==false};
 }
@@ -124,19 +135,23 @@ export async function quoteExtra(id,product,quantity,activationData) {
   let unit=fresh.price;
   for(const t of fresh.bulk_discounts)if(quantity>=t.min_qty)unit=Math.min(unit,t.unit_price);
   const cost=Math.round(unit*quantity*10000)/10000;
+  if(id==='subexpress')return {cost,product:fresh};
   const wallet=await extraBalance(id);
   if(wallet.balance==null||wallet.balance+0.00001<cost||!wallet.canPurchase)throw new ProviderError('El proveedor necesita saldo antes de comprar.',{provider:id,notCharged:true});
   return {cost,product:fresh};
 }
 export async function purchaseExtra(id,o,product,quote,activationData) {
   if(id==='safwan')return providerRequest(id,'POST','/order',{product_id:Number(product.sourceId),quantity:o.quantity,request_id:o.external_order_id});
+  if(id==='jero')return providerRequest(id,'POST','?action=order',{product_id:Number(product.sourceId),quantity:o.quantity,external_order_id:o.external_order_id});
+  if(id==='subexpress')return providerRequest(id,'POST','/order',{product_id:Number(product.sourceId),quantity:o.quantity});
   if(id==='hmk')return providerRequest(id,'POST','/orders',{product_id:Number(product.sourceId),quantity:o.quantity,idempotency_key:o.external_order_id,...(activationData?{customer_input:activationData}:{})});
   if(id==='resellwithme')return providerRequest(id,'POST','/orders',{product_id:Number(product.sourceId),qty:o.quantity,quote_id:quote.quoteId,...(activationData?{fields:{[product.input_fields[0].key]:activationData}}:{})},{'Idempotency-Key':o.external_order_id});
   return providerRequest(id,'POST','/order',{service_id:product.sourceId,quantity:o.quantity,external_order_id:o.external_order_id});
 }
 export async function readExtraOrder(o) {
   const id=o.kind;
-  if(id==='safwan')return null; // No hay consulta de pedidos documentada: revisión manual si la respuesta es incierta.
+  if(id==='safwan'||id==='subexpress')return null; // No hay consulta de pedidos documentada: revisión manual si la respuesta es incierta.
+  if(id==='jero')return providerRequest(id,'GET',`?action=order&external_order_id=${encodeURIComponent(o.external_order_id)}`);
   if(id==='hmk')return providerRequest(id,'GET',`/orders/by-key/${encodeURIComponent(o.external_order_id)}`);
   if(id==='resellwithme') {
     if(o.kokoro_order_id)return providerRequest(id,'GET',`/orders/${encodeURIComponent(o.kokoro_order_id)}`);
@@ -152,11 +167,12 @@ export async function readExtraOrder(o) {
 export function normalizedExtraOrder(id,d) {
   const p=d?.order||d?.data||d||{};
   const status=p.status||'';
-  const items=id==='hmk'?p.items:id==='pai'?p.products:id==='safwan'?p.items||p.delivered_items:null;
-  const delivery=Array.isArray(items)?items.filter(x=>typeof x==='string').join('\n'):String(id==='hmk'?p.content||'':id==='resellwithme'?p.code||'':id==='safwan'?p.credentials||p.delivered_item||'':'');
-  const amount=id==='hmk'?Number(p.total):id==='pai'?Number(p.total_cost):id==='safwan'?Number(p.total_cost??p.total):Number(p.amount_minor)/1e6;
+  const items=['hmk','jero','subexpress'].includes(id)?p.items:id==='pai'?p.products:id==='safwan'?p.items||p.delivered_items:null;
+  const itemText=x=>typeof x==='string'?x:x&&typeof x==='object'?String(x.value??x.content??x.code??x.credentials??x.item??''):'';
+  const delivery=Array.isArray(items)?items.map(itemText).filter(Boolean).join('\n'):String(id==='hmk'?p.content||'':id==='resellwithme'?p.code||'':id==='safwan'?p.credentials||p.delivered_item||'':'');
+  const amount=id==='jero'?Number(p.total):id==='subexpress'?Number(p.charged_usd):id==='hmk'?Number(p.total):id==='pai'?Number(p.total_cost):id==='safwan'?Number(p.total_cost??p.total):Number(p.amount_minor)/1e6;
   return {id:p.order_id||p.id||null,status,delivery,cost:Number.isFinite(amount)?amount:null,itemCount:Array.isArray(items)?items.length:null,
-    delivered:(['delivered','fulfilled','completed'].includes(status)||(id==='safwan'&&d?.ok===true&&!status))&&!!delivery,
+    delivered:(['delivered','fulfilled','completed'].includes(status)||(id==='safwan'&&d?.ok===true&&!status)||(['jero','subexpress'].includes(id)&&!status))&&!!delivery,
     refunded:status==='refunded'||p.wallet_status==='refunded',
     // Un fallo sin confirmación financiera permanece en revisión.
   };

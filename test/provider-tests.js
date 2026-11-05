@@ -7,12 +7,31 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
   const settings=await import('../src/provider-settings.js');
   const providers=await import('../src/providers.js');
   const catalog=await import('../src/catalog.js');
-  const state={calls:[],hmkPrice:1,hmkFail:false,hmkPartial:false,paiStock:5,safwanTimeout:false,readFailure:false};
+  const state={jeroCalls:0,subxFail:false,subxTimeout:false,calls:[],hmkPrice:1,hmkFail:false,hmkPartial:false,paiStock:5,safwanTimeout:false,readFailure:false};
   const server=http.createServer(async(req,res)=>{
     let raw='';for await(const chunk of req)raw+=chunk;
     const body=raw?JSON.parse(raw):{};state.calls.push({method:req.method,url:req.url,body,headers:req.headers});
     const json=(d,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(d));};
     const path=req.url.split('?')[0];
+    const q=new URL(req.url,'http://x').searchParams;
+    if(path==='/jero') {
+      if(req.headers.authorization!=='Bearer secret-test-jero-0123456789')return json({success:false,error:{code:'unauthorized',message:'bad key'}},401);
+      if(q.get('action')==='products')return json({success:true,products:[
+        {id:5,title:'Office 365 Pro Plus',price:0.15,stock:700,tiers:[]},
+        {id:7,title:'Gemini Invite (Pro 18 Months Family)',price:3,stock:30,tiers:[]},
+        {id:900001,title:'Elementor Pro',price:2,stock:99,tiers:[]},
+        {id:8,title:'Gemini AI Pro 3 Months',price:0.9,stock:1247,tiers:[]},
+      ]});
+      if(q.get('action')==='balance')return json({success:true,balance:50});
+      if(q.get('action')==='order'&&req.method==='POST'){state.jeroCalls++;return json({success:true,order_id:'J'+state.jeroCalls,items:['office@mail.com|Clave123'],total:0.15*body.quantity,balance:49.85});}
+      if(q.get('action')==='order')return json({success:true,order_id:'J1',status:'completed',items:['office@mail.com|Clave123'],total:0.15});
+    }
+    if(path==='/subexpress/products')return json({products:[{id:3,name:'CapCut Pro 30 Days | FW',price:1.35,stock:185},{id:4,name:'Duolingo Super 1 Year (NW)',price:0.5,stock:49}]});
+    if(path==='/subexpress/order'&&req.method==='POST'){
+      if(state.subxTimeout)return req.socket.destroy();
+      if(state.subxFail)return json({detail:'out of stock'},409);
+      return json({order_id:123,items:['capcut@mail.com|Pass'],charged_usd:1.35*body.quantity});
+    }
     if(req.method==='GET'&&(/\/me$/.test(path)||path==='/safwan/balance'))return json({balance:100,wallets:{USD:{balance_micros:100000000}},can_purchase:true});
     if(req.method==='GET'&&path.endsWith('/products')) {
       if(state.readFailure)return json({error:'offline'},503);
@@ -142,6 +161,37 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
       assert.equal(n(),purchases);assert.equal((await users.getUser(9191)).balance,before);assert.ok(out.some(x=>x.includes('condiciones cambiaron')));
       await Promise.all([tap('ok'),tap('ok')]);assert.equal(n(),purchases+1);
       assert.equal(Number((await one("SELECT count(*) AS n FROM orders WHERE user_id=9191")).n),1);state.hmkPrice=1;
+    });
+    await test('Jero: catálogo con Bearer, compra con external_order_id y vitrina sin selección manual',async()=>{
+      await settings.saveProviderSettings('jero',{key:'secret-test-jero-0123456789',enabled:true,selected:[]});
+      const all=await providers.extraProducts('jero',{fresh:true,all:true});
+      assert.equal(all.find(x=>x.sourceId==='7').supported,false); // invitación a un Gmail: otro flujo
+      assert.equal(all.find(x=>x.sourceId==='900001').supported,false);
+      const pub=await providers.extraProducts('jero',{fresh:true});
+      assert.deepEqual(pub.map(x=>x.sourceId).sort(),['5','8']); // aprobados en la vitrina, sin marcarlos
+      const { curate } = await import('../src/winners.js');
+      const shown=curate(pub,{priceOf:x=>x.price,isFeatured:()=>false});
+      assert.ok(shown.some(x=>x.slot==='office365_12'&&x.id==='jero:5'));
+      assert.ok(shown.some(x=>x.slot==='gemini_pro_3m'&&x.id==='jero:8'));
+      const office=pub.find(x=>x.sourceId==='5');
+      const r=await orders.buyProduct({userId:9090,product:office,quantity:1,unitPrice:pricing.productUnitPrice(office)});
+      assert.equal(r.order.status,'delivered');assert.equal(r.order.kind,'jero');assert.match(r.order.delivery,/office@mail.com/);
+      const call=state.calls.find(x=>x.method==='POST'&&x.url.startsWith('/jero?action=order'));
+      assert.equal(call.body.external_order_id,r.order.external_order_id);
+    });
+    await test('SubExpress: compra directa; 409 reembolsa; un corte no se reintenta',async()=>{
+      await settings.saveProviderSettings('subexpress',{key:'secret-test-subexpress-0123456789',enabled:true,selected:[]});
+      const pub=await providers.extraProducts('subexpress',{fresh:true});
+      assert.deepEqual(pub.map(x=>x.name),['CapCut Pro 30 Days | FW']); // Duolingo (VPN de India) no está en la vitrina
+      const cc=pub[0];
+      const r=await orders.buyProduct({userId:9090,product:cc,quantity:1,unitPrice:pricing.productUnitPrice(cc)});
+      assert.equal(r.order.status,'delivered');assert.match(r.order.delivery,/capcut@mail.com/);assert.equal(Number(r.order.cost),1.35);
+      const before=(await users.getUser(9090)).balance;state.subxFail=true;
+      const r2=await orders.buyProduct({userId:9090,product:cc,quantity:1,unitPrice:pricing.productUnitPrice(cc)});
+      assert.equal(r2.order.status,'refunded');assert.equal((await users.getUser(9090)).balance,before);state.subxFail=false;
+      const n=state.calls.filter(x=>x.url==='/subexpress/order').length;state.subxTimeout=true;
+      const r3=await orders.buyProduct({userId:9090,product:cc,quantity:1,unitPrice:pricing.productUnitPrice(cc)});
+      assert.equal(r3.order.status,'processing');assert.equal(state.calls.filter(x=>x.url==='/subexpress/order').length,n+1);state.subxTimeout=false;
     });
     await test('panel de proveedores: autenticación, CSRF y claves siempre ocultas',async()=>{
       const {config}=await import('../src/config.js');config.adminPassword='provider-demo-password';config.sessionSecret='provider-demo-session';

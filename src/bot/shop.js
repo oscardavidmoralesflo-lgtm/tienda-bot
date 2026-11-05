@@ -74,7 +74,7 @@ export async function bestSellers(limit = 5) {
   ).catch(() => []);
   for (const r of sold) add(byName.get(r.product_name));
   for (const p of inStock) if (getOverride(p.id)?.featured) add(p);
-  for (const key of TOP_ORDER) add(inStock.find((p) => p.slot === key || winnerSlot(p.id)?.key === key));
+  for (const key of TOP_ORDER) add(inStock.find((p) => p.slot === key || winnerSlot(p)?.key === key));
   return picked;
 }
 
@@ -92,7 +92,7 @@ async function findProduct(key, fresh = false) {
   const p = await catalog.findProduct(id, fresh);
   if (!p || isHidden(p.id)) return null;
   // En modo vitrina el producto se muestra y se registra con el nombre claro de su ranura
-  if (winnersMode() && winnerSlot(p.id)) return asSlotProduct(p);
+  if (winnersMode() && winnerSlot(p)) return asSlotProduct(p);
   return p.displayName ? { ...p, name: p.displayName } : p;
 }
 

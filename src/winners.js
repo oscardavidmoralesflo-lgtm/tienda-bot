@@ -17,10 +17,14 @@ export const WINNERS = [
   // ---- Inteligencia artificial ----
   { key: 'gpt_fw', cop: 49900, name: 'ChatGPT Plus 1 Mes · Garantía completa', ids: ['91191e45-9207-4245-a7b5-4213fff78fd8'] },
   { key: 'gpt_eco', cop: 26900, name: 'ChatGPT Plus 1 Mes · Económico (Sin garantía)', ids: ['bunny:84', '2b9cc107-77cf-4565-99df-932da1044cc2'] },
+  // Jero: link de 3 meses en tu cuenta Google, pide tarjeta para verificar, sin garantía (igual que el de KOKORO)
+  { key: 'gemini_pro_3m', cop: 7900, name: 'Gemini AI Pro 3 Meses · En tu cuenta Google', ids: ['df31e1db-17be-4d27-9e44-4949578ec406'],
+    match: [{ src: 'jero', re: /^gemini ai pro\W+3 months?$/i }] },
   { key: 'gemini_plus_12', cop: 9900, name: 'Gemini Plus 12 Meses · En tu cuenta Google', ids: ['bunny:93'] },
   { key: 'muse_1b', cop: 4900, name: 'Muse AI · 1000 millones de tokens', ids: ['bunny:31', '630d58eb-7cd1-4707-a411-734a3e4ee08a'] },
   // ---- Diseño y edición ----
-  { key: 'capcut_1m', cop: 12900, name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3'] },
+  { key: 'capcut_1m', cop: 12900, name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3'],
+    match: [{ src: 'subexpress', re: /^capcut pro 30 days\s*\|\s*fw/i }, { src: 'jero', re: /^capcut pro 1 month$/i }] },
   { key: 'canva_3y', cop: 9900, name: 'Canva Pro 3 Años · Cuenta lista', ids: ['canva_team_invite_pro'] },
   { key: 'canva_own', cop: 14900, name: 'Canva Pro 3 Años · En tu correo', ids: ['canva_team_invite_own_email_pro'] },
   { key: 'adobe_express_12', cop: 7900, name: 'Adobe Express Premium 12 Meses', ids: ['adobe_express_12m'] },
@@ -40,6 +44,8 @@ export const WINNERS = [
   { key: 'linkedin_3m', cop: 14900, name: 'LinkedIn Premium Career 3 Meses', ids: ['linkedin_career_3m'] },
   // ---- Office y productividad ----
   { key: 'm365_12', cop: 19900, name: 'Microsoft 365 Personal 12 Meses', ids: ['Microsoft_365_personal'] },
+  { key: 'office365_12', cop: 9900, name: 'Office 365 Pro Plus 12 Meses · Cuenta privada', ids: [],
+    match: [{ src: 'jero', re: /^office 365 pro plus$/i }] },
   { key: 'office_2021', cop: 14900, name: 'Office 2021 Pro Plus · Licencia', ids: ['2a45036b-b2c5-4a8a-a5fc-9141e43c1046'] },
   { key: 'windows_pro', cop: 14900, name: 'Windows 10/11 Pro · Licencia', ids: ['be5b54d4-4f2b-49bc-ac40-2a40b299bbf9'] },
   { key: 'notion_3m', cop: 9900, name: 'Notion Business 3 Meses · En tu cuenta', ids: ['notion_Bussines_code3m', 'bunny:38'] },
@@ -47,7 +53,8 @@ export const WINNERS = [
   { key: 'ilovepdf_12', cop: 12900, name: 'iLovePDF Premium 12 Meses', ids: ['ilove_pdf_12m', 'bunny:35'] },
   // ---- VPN ----
   // La cuenta compartida de NordVPN (nordvpn_shared_3m) pide un código por botón que este bot no maneja: se usa el link.
-  { key: 'nord_3m', cop: 16900, name: 'NordVPN 3 Meses · En tu cuenta', ids: ['b43c40c1-6130-429b-9b9f-759650ade50d'] },
+  { key: 'nord_3m', cop: 16900, name: 'NordVPN 3 Meses · En tu cuenta', ids: ['b43c40c1-6130-429b-9b9f-759650ade50d'],
+    match: [{ src: 'subexpress', re: /^nord ?vpn 3m activation link/i }] },
   { key: 'surfshark_2m', cop: 12900, name: 'Surfshark VPN 2 Meses · Cuenta lista', ids: ['vpn_Surfshark_60d', 'bunny:90'] },
 ];
 
@@ -56,7 +63,16 @@ export const TOP_ORDER = ['gpt_eco', 'gemini_plus_12', 'capcut_1m', 'canva_own',
 
 const slotOf = new Map();
 WINNERS.forEach((w) => w.ids.forEach((id) => slotOf.set(id, w)));
-export const winnerSlot = (id) => slotOf.get(id) || null;
+// Mayoristas conectados por API (Jero, SubExpress…): sus IDs solo se conocen con la clave,
+// así que se reconocen por proveedor + nombre exacto revisado (ver "match" en cada ranura).
+const matchesRule = (w, p) => (w.match || []).some((r) => r.src === p.source && r.re.test(String(p.name || '')));
+// Ranura de un producto (acepta el producto o solo su ID)
+export function winnerSlot(x) {
+  if (!x) return null;
+  if (typeof x === 'string') return slotOf.get(x) || null;
+  return slotOf.get(x.id) || WINNERS.find((w) => matchesRule(w, x)) || null;
+}
+export const inSlot = (w, p) => w.ids.includes(p.id) || matchesRule(w, p);
 export const winnersMode = () => s('catalog_mode') !== 'all';
 
 // Precios objetivo guardados desde el panel (ajuste winner_prices = {"gpt_fw":49900,...}); vacío = el de este archivo
@@ -71,21 +87,20 @@ export function targetCop(key) {
 
 // Producto con el nombre y el precio objetivo de su ranura (solo en modo vitrina)
 export function asSlotProduct(p) {
-  const w = winnersMode() ? slotOf.get(p.id) : null;
+  const w = winnersMode() ? winnerSlot(p) : null;
   return w ? { ...p, name: w.name, slot: w.key, targetCop: targetCop(w.key) } : p;
 }
 
 // De la lista visible (ya sin ocultos), deja una oferta por ranura (la de menor costo con stock)
 // y añade los destacados ⭐ que no estén en ninguna ranura.
 export function curate(list, { priceOf, isFeatured }) {
-  const byId = new Map(list.map((p) => [p.id, p]));
   const out = [];
   for (const w of WINNERS) {
-    const offers = w.ids.map((id) => byId.get(id)).filter((p) => p && p.stock > 0);
+    const offers = list.filter((p) => p.stock > 0 && inSlot(w, p));
     if (!offers.length) continue;
     offers.sort((a, b) => priceOf(a) - priceOf(b) || Number(a.price) - Number(b.price) || b.stock - a.stock);
     out.push({ ...offers[0], name: w.name, slot: w.key, offers: offers.length, targetCop: targetCop(w.key) });
   }
-  for (const p of list) if (!slotOf.has(p.id) && isFeatured(p.id)) out.push(p);
+  for (const p of list) if (!winnerSlot(p) && isFeatured(p.id)) out.push(p);
   return out;
 }
