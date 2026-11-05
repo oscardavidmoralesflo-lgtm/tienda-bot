@@ -114,7 +114,11 @@ async function load(id) {
     const rows=findRows(d) || (d && typeof d === 'object' && !Object.keys(d).some(k => k !== '_http' && k !== 'success' && k !== 'ok') ? [] : null);
     if (!Array.isArray(rows)) throw new Error(`Formato de catálogo no reconocido (${shapeOf(d)})`);
     const products=rows.map(p=>normalizeProviderProduct(id,p));
-    health.set(id,{lastSuccess:new Date().toISOString(),error:null,count:products.length});
+    // Saldo en el mayorista: lo que no alcanza a pagar no se muestra a los clientes
+    let balance=null;
+    try { balance=(await extraBalance(id)).balance; } catch { /* sin dato de saldo: se decide al pagar */ }
+    health.set(id,{lastSuccess:new Date().toISOString(),error:null,count:products.length,balance});
+    products.balance=balance;
     return products;
   } catch(e) { health.set(id,{...health.get(id),error:e.message});throw e; }
 }
@@ -122,7 +126,9 @@ export async function extraProducts(id, {fresh=false,all=false}={}) {
   const c=providerConnection(id);
   if (!c.key || (!all && !c.enabled)) return [];
   const rows=await (fresh ? cache.fresh(`p:${id}:products`,()=>load(id)) : cache.swr(`p:${id}:products`,()=>load(id)));
-  return all ? rows : rows.filter(p=>p.supported && (c.selected.includes(p.sourceId) || !!winnerSlot(p)));
+  if(all)return rows;
+  const funded=p=>rows.balance==null||Number(rows.balance)+0.00001>=Number(p.price);
+  return rows.filter(p=>p.supported && funded(p) && (c.selected.includes(p.sourceId) || !!winnerSlot(p)));
 }
 export async function extraBalance(id) {
   if(id==='subexpress')return {balance:null,canPurchase:true}; // sin consulta de saldo documentada: un 402 no cobra

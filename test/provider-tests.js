@@ -7,7 +7,7 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
   const settings=await import('../src/provider-settings.js');
   const providers=await import('../src/providers.js');
   const catalog=await import('../src/catalog.js');
-  const state={jeroCalls:0,subxFail:false,subxTimeout:false,calls:[],hmkPrice:1,hmkFail:false,hmkPartial:false,paiStock:5,safwanTimeout:false,readFailure:false};
+  const state={jeroBalance:50,jeroCalls:0,subxFail:false,subxTimeout:false,calls:[],hmkPrice:1,hmkFail:false,hmkPartial:false,paiStock:5,safwanTimeout:false,readFailure:false};
   const server=http.createServer(async(req,res)=>{
     let raw='';for await(const chunk of req)raw+=chunk;
     const body=raw?JSON.parse(raw):{};state.calls.push({method:req.method,url:req.url,body,headers:req.headers});
@@ -24,7 +24,7 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
         {id:14,title:'CapCut Pro 1 Aylık',price:1.75,stock:37,tiers:[]},
         {id:11,title:'Envato 1 Aylık',price:2,stock:83,tiers:[]},
       ]}});
-      if(q.get('action')==='balance')return json({success:true,data:{balance:50}});
+      if(q.get('action')==='balance')return json({success:true,data:{balance:state.jeroBalance}});
       if(q.get('action')==='order'&&req.method==='POST'){state.jeroCalls++;return json({success:true,order_id:'J'+state.jeroCalls,items:['office@mail.com|Clave123'],total:0.15*body.quantity,balance:49.85});}
       if(q.get('action')==='order')return json({success:true,order_id:'J1',status:'completed',items:['office@mail.com|Clave123'],total:0.15});
     }
@@ -171,6 +171,13 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
       assert.equal(all.find(x=>x.sourceId==='900001').supported,false);
       const pub=await providers.extraProducts('jero',{fresh:true});
       assert.deepEqual(pub.map(x=>x.sourceId).sort(),['14','5','8']); // aprobados en la vitrina (nombres en turco incluidos); Envato no
+      // sin saldo en el mayorista: no se muestra nada de él (el cliente no ve algo que no se puede comprar)
+      state.jeroBalance=0;
+      assert.equal((await providers.extraProducts('jero',{fresh:true})).length,0);
+      state.jeroBalance=1; // alcanza para Office (0,15) y Gemini (0,90), no para CapCut (1,75)
+      assert.deepEqual((await providers.extraProducts('jero',{fresh:true})).map(x=>x.sourceId).sort(),['5','8']);
+      state.jeroBalance=50;
+      await providers.extraProducts('jero',{fresh:true});
       const { curate } = await import('../src/winners.js');
       const shown=curate(pub,{priceOf:x=>x.price,isFeatured:()=>false});
       assert.ok(shown.some(x=>x.slot==='office365_12'&&x.id==='jero:5'));
