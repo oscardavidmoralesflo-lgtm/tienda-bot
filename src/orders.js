@@ -7,7 +7,7 @@ import { bunny, BunnyError, balanceOf } from './bunny.js';
 import { credit, getUser } from './users.js';
 import { num, s } from './settings.js';
 import { money, round2, round4, fmt, protectsProfit } from './pricing.js';
-import { isExtraProvider, quoteExtra, purchaseExtra, normalizedExtraOrder, readExtraOrder, providerNames, ProviderError } from './providers.js';
+import { isExtraProvider, quoteExtra, purchaseExtra, normalizedExtraOrder, readExtraOrder, providerNames, ProviderError, markUnfunded } from './providers.js';
 import { esc } from './util.js';
 import { t, errorText, localName, userLang } from './i18n.js';
 import { levelOf, durationDays } from './loyalty.js';
@@ -199,6 +199,11 @@ async function buyFromExtra(o,product,quote,activationData) {
   try { return {ok:true,order:await applyExtraOrder(o,await purchaseExtra(o.kind,o,product,quote,activationData))}; }
   catch(e) {
     if(e instanceof ProviderError&&e.definitelyNotCharged) {
+      if(e.status===402||e.code==='insufficient_balance') {
+        // Sin saldo en el mayorista: se ocultan sus productos 10 min (el bot usa otro proveedor) y se avisa al dueño
+        markUnfunded(o.kind);
+        await notifier.admins(`🚨 <b>Sin saldo en ${esc(providerNames[o.kind])}</b>\nPedido #${o.id}: ${esc(o.product_name)} (costo ${money(o.cost)} USD). Se reembolsó al cliente y sus productos se ocultan 10 min. Recarga en su bot (Deposit).`);
+      }
       const message=t(await userLang(o.user_id),'quote_unavailable');
       await refundOrder(o.id,message);return {ok:false,reason:'api',message,order:await one('SELECT * FROM orders WHERE id=$1',[o.id])};
     }

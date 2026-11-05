@@ -127,11 +127,27 @@ export async function extraProducts(id, {fresh=false,all=false}={}) {
   if (!c.key || (!all && !c.enabled)) return [];
   const rows=await (fresh ? cache.fresh(`p:${id}:products`,()=>load(id)) : cache.swr(`p:${id}:products`,()=>load(id)));
   if(all)return rows;
+  if(isUnfunded(id))return [];
   const funded=p=>rows.balance==null||Number(rows.balance)+0.00001>=Number(p.price);
   return rows.filter(p=>p.supported && funded(p) && (c.selected.includes(p.sourceId) || !!winnerSlot(p)));
 }
+// Si un mayorista responde "sin saldo" (402) y no informa su saldo, se ocultan sus productos un rato
+const unfunded=new Map();
+const UNFUNDED_MS=10*60_000;
+export function markUnfunded(id){unfunded.set(id,Date.now()+UNFUNDED_MS);}
+export function isUnfunded(id){const t=unfunded.get(id);if(t&&t>Date.now())return true;unfunded.delete(id);return false;}
 export async function extraBalance(id) {
-  if(id==='subexpress')return {balance:null,canPurchase:true}; // sin consulta de saldo documentada: un 402 no cobra
+  if(id==='subexpress') {
+    // Su documentación no publica la ruta del saldo: se prueban las habituales; sin dato, decide el 402 al pagar
+    for(const path of ['/balance','/wallet','/me']) {
+      try {
+        const d=await providerRequest(id,'GET',path);
+        const v=Number(d.balance ?? d.balance_usd ?? d.wallet?.balance ?? d.data?.balance ?? d.usd);
+        if(Number.isFinite(v))return {balance:v,canPurchase:true};
+      } catch { /* siguiente ruta */ }
+    }
+    return {balance:null,canPurchase:true};
+  }
   const d=await providerRequest(id,'GET',id==='safwan'?'/balance':id==='jero'?'?action=balance':'/me');
   const raw=d.balance ?? d.data?.balance ?? d.wallet?.balance ?? d.result?.balance ?? (typeof d.data === 'number' ? d.data : undefined);
   const value=id==='resellwithme' ? Number(d.wallets?.USD?.balance_micros)/1e6 : Number(typeof raw === 'object' && raw ? raw.usd ?? raw.USD ?? raw.amount : raw);

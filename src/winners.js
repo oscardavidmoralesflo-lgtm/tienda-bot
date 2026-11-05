@@ -25,7 +25,7 @@ export const WINNERS = [
   { key: 'muse_1b', cop: 4900, name: 'Muse AI · 1000 millones de tokens', ids: ['bunny:31', '630d58eb-7cd1-4707-a411-734a3e4ee08a'] },
   // ---- Diseño y edición ----
   // jero:14 = "CapCut Pro 1 Aylık" en su API (cuenta personal, garantía 25 días)
-  { key: 'capcut_1m', cop: 12900, name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3', 'jero:14'],
+  { key: 'capcut_1m', cop: 12900, name: 'CapCut Pro 1 Mes · Cuenta Team', ids: ['capcut_pro_team', 'bunny:3', 'jero:14', 'subexpress:1'],
     match: [{ src: 'subexpress', re: /^capcut pro 30 days\s*\|\s*fw/i }, { src: 'jero', re: /^capcut pro 1 (month|ayl[ıi]k)$/i }] },
   { key: 'canva_3y', cop: 9900, name: 'Canva Pro 3 Años · Cuenta lista', ids: ['canva_team_invite_pro'] },
   { key: 'canva_own', cop: 14900, name: 'Canva Pro 3 Años · En tu correo', ids: ['canva_team_invite_own_email_pro'] },
@@ -55,7 +55,7 @@ export const WINNERS = [
   { key: 'ilovepdf_12', cop: 12900, name: 'iLovePDF Premium 12 Meses', ids: ['ilove_pdf_12m', 'bunny:35'] },
   // ---- VPN ----
   // La cuenta compartida de NordVPN (nordvpn_shared_3m) pide un código por botón que este bot no maneja: se usa el link.
-  { key: 'nord_3m', cop: 16900, name: 'NordVPN 3 Meses · En tu cuenta', ids: ['b43c40c1-6130-429b-9b9f-759650ade50d'],
+  { key: 'nord_3m', cop: 16900, name: 'NordVPN 3 Meses · En tu cuenta', ids: ['b43c40c1-6130-429b-9b9f-759650ade50d', 'subexpress:7'],
     match: [{ src: 'subexpress', re: /^nord ?vpn 3m activation link/i }] },
   { key: 'surfshark_2m', cop: 12900, name: 'Surfshark VPN 2 Meses · Cuenta lista', ids: ['vpn_Surfshark_60d', 'bunny:90'] },
 ];
@@ -67,7 +67,9 @@ const slotOf = new Map();
 WINNERS.forEach((w) => w.ids.forEach((id) => slotOf.set(id, w)));
 // Mayoristas conectados por API (Jero, SubExpress…): sus IDs solo se conocen con la clave,
 // así que se reconocen por proveedor + nombre exacto revisado (ver "match" en cada ranura).
-const matchesRule = (w, p) => (w.match || []).some((r) => r.src === p.source && r.re.test(String(p.name || '')));
+// Se ignoran emojis y símbolos al inicio del nombre (SubExpress los usa: "🖤 CapCut Pro 30 Days | FW").
+const cleanName = (n) => String(n || '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
+const matchesRule = (w, p) => (w.match || []).some((r) => r.src === p.source && r.re.test(cleanName(p.name)));
 // Ranura de un producto (acepta el producto o solo su ID)
 export function winnerSlot(x) {
   if (!x) return null;

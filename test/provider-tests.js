@@ -28,9 +28,10 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
       if(q.get('action')==='order'&&req.method==='POST'){state.jeroCalls++;return json({success:true,order_id:'J'+state.jeroCalls,items:['office@mail.com|Clave123'],total:0.15*body.quantity,balance:49.85});}
       if(q.get('action')==='order')return json({success:true,order_id:'J1',status:'completed',items:['office@mail.com|Clave123'],total:0.15});
     }
-    if(path==='/subexpress/products')return json({products:[{id:3,name:'CapCut Pro 30 Days | FW',price:1.35,stock:185},{id:4,name:'Duolingo Super 1 Year (NW)',price:0.5,stock:49}]});
+    if(path==='/subexpress/products')return json({products:[{id:3,name:'🖤 CapCut Pro 30 Days | FW',price:1.35,stock:185},{id:4,name:'👋 Duolingo Super 1 Year (NW)',price:0.5,stock:49},{id:7,name:'❤️ Nord VPN 3M activation Link | 10 Device | FW—',price:2,stock:2}]});
     if(path==='/subexpress/order'&&req.method==='POST'){
       if(state.subxTimeout)return req.socket.destroy();
+      if(state.subxBroke)return json({detail:'insufficient balance'},402);
       if(state.subxFail)return json({detail:'out of stock'},409);
       return json({order_id:123,items:['capcut@mail.com|Pass'],charged_usd:1.35*body.quantity});
     }
@@ -192,8 +193,9 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
     await test('SubExpress: compra directa; 409 reembolsa; un corte no se reintenta',async()=>{
       await settings.saveProviderSettings('subexpress',{key:'secret-test-subexpress-0123456789',enabled:true,selected:[]});
       const pub=await providers.extraProducts('subexpress',{fresh:true});
-      assert.deepEqual(pub.map(x=>x.name),['CapCut Pro 30 Days | FW']); // Duolingo (VPN de India) no está en la vitrina
-      const cc=pub[0];
+      // nombres con emoji: CapCut y NordVPN entran; Duolingo (VPN de India) no está en la vitrina
+      assert.deepEqual(pub.map(x=>x.sourceId).sort(),['3','7']);
+      const cc=pub.find(x=>x.sourceId==='3');
       const r=await orders.buyProduct({userId:9090,product:cc,quantity:1,unitPrice:pricing.productUnitPrice(cc)});
       assert.equal(r.order.status,'delivered');assert.match(r.order.delivery,/capcut@mail.com/);assert.equal(Number(r.order.cost),1.35);
       const before=(await users.getUser(9090)).balance;state.subxFail=true;
@@ -202,6 +204,12 @@ export async function runProviderTests({test,users,orders,pricing,saveSettings,o
       const n=state.calls.filter(x=>x.url==='/subexpress/order').length;state.subxTimeout=true;
       const r3=await orders.buyProduct({userId:9090,product:cc,quantity:1,unitPrice:pricing.productUnitPrice(cc)});
       assert.equal(r3.order.status,'processing');assert.equal(state.calls.filter(x=>x.url==='/subexpress/order').length,n+1);state.subxTimeout=false;
+      // sin saldo (402): reembolsa y oculta sus productos para que el bot use otro proveedor
+      state.subxBroke=true;const b2=(await users.getUser(9090)).balance;
+      const r4=await orders.buyProduct({userId:9090,product:cc,quantity:1,unitPrice:pricing.productUnitPrice(cc)});
+      assert.equal(r4.order.status,'refunded');assert.equal((await users.getUser(9090)).balance,b2);
+      assert.equal((await providers.extraProducts('subexpress',{fresh:true})).length,0);
+      state.subxBroke=false;
     });
     await test('panel de proveedores: autenticación, CSRF y claves siempre ocultas',async()=>{
       const {config}=await import('../src/config.js');config.adminPassword='provider-demo-password';config.sessionSecret='provider-demo-session';
